@@ -28,7 +28,7 @@
 		}
 	},
 	"dependencies": {
-		"@automattic/charts": "^1.2.1",
+		"@automattic/charts": "workspace:*",
 		"@wordpress/boot": "0.11.0",
 		"@wordpress/data": "10.44.0",
 		"@wordpress/i18n": "^6.9.0",
