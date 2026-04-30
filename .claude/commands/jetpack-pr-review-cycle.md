@@ -1,7 +1,7 @@
 ---
 name: jetpack-pr-review-cycle
 description: >
-  Run the post-creation review-address loop for an Automattic/jetpack PR — tag @copilot and @claude,
+  Run the post-creation review-address loop for a jetpack PR — tag @copilot and @claude,
   poll for new comments + CI status every 10 minutes, address actionable feedback, fix CI failures,
   keep the branch rebased on fresh trunk every round (not only on conflict), repeat up to 10 rounds. Use immediately after `gh pr create` on a PR
   that this agent owns, or when the user / orchestrator says "run the review loop", "address PR
@@ -19,10 +19,12 @@ You are authorized to: push commits, comment on the PR, add/remove `[Status] *` 
   ```
   If that fails (no PR for this branch), stop and tell the user.
 ## Pre-flight
-1. **Repo check** — must be on a clone of `Automattic/jetpack`:
+1. **Repo detection** — detect the current repo and store for all subsequent API calls:
    ```bash
-   gh repo view --json nameWithOwner -q .nameWithOwner   # → Automattic/jetpack
+   REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+   # e.g. Automattic/jetpack or dognose24/jetpack
    ```
+   Must be a jetpack fork (name ends with `/jetpack`). Fail if `gh repo view` errors.
 2. **Auth** — `gh auth status` must succeed.
 3. **Branch** — capture the current branch (`BRANCH=$(git rev-parse --abbrev-ref HEAD)`). The loop assumes commits go on this branch, not `trunk`.
 4. **State file** — `.claude/pr-review-state.json` in the working copy tracks comment IDs already addressed across rounds. Create if missing:
@@ -52,9 +54,9 @@ Increment round counter to 2 and enter the loop.
 At the **top** of each round, check stopping conditions (see "Stopping" below). If neither fires, run the round:
 ### a. Snapshot review state
 ```bash
-gh api "repos/Automattic/jetpack/pulls/<PR>/comments" --paginate \
+gh api "repos/$REPO/pulls/<PR>/comments" --paginate \
   > /tmp/pr-<PR>-inline-r${ROUND}.json
-gh pr view <PR> --json reviews,comments \
+gh pr view <PR> --repo "$REPO" --json reviews,comments \
   > /tmp/pr-<PR>-reviews-r${ROUND}.json
 ```
 Compare to prior rounds via `.claude/pr-review-state.json`. Any comment ID not in `addressed_ids` is **new** for this round.
@@ -78,14 +80,14 @@ When uncertain (new bot account, ambiguous endorsement), treat as non-addressabl
   ```
 - **Question / clarification** — reply via the inline replies API:
   ```bash
-  gh api repos/Automattic/jetpack/pulls/comments/<id>/replies \
+  gh api "repos/$REPO/pulls/comments/<id>/replies" \
     --method POST -f body="<reply text>"
   ```
 - **After** the commit lands, resolve the inline thread with a reply that cites the commit hash (per human's global rule).
 - Append the comment ID to `addressed_ids` in the state file.
 ### d. CI check monitoring (every round, even with no new comments)
 ```bash
-gh pr checks <PR> --repo Automattic/jetpack --required
+gh pr checks <PR> --repo "$REPO" --required
 ```
 For each FAILED or timed-out required check:
 ```bash
@@ -101,7 +103,7 @@ Keeping the PR rebased on fresh trunk is a **requirement**, not just a conflict-
 ```bash
 git fetch origin trunk
 BEHIND=$(git rev-list --count HEAD..origin/trunk)
-gh pr view <PR> --repo Automattic/jetpack --json mergeable,mergeStateStatus -q '{m:.mergeable,s:.mergeStateStatus}'
+gh pr view <PR> --repo "$REPO" --json mergeable,mergeStateStatus -q '{m:.mergeable,s:.mergeStateStatus}'
 ```
 Decision matrix:
 - `BEHIND == 0` AND `mergeable: MERGEABLE` → no-op, continue to (f).
@@ -167,7 +169,7 @@ Tangled rebase the loop can't resolve, or a hard error (auth lost, API persisten
 ## Final output
 The skill must emit these prefixed lines as the **last** lines of stdout — the orchestrator greps for them:
 ```
-PR_URL: https://github.com/Automattic/jetpack/pull/<PR>
+PR_URL: https://github.com/$REPO/pull/<PR>
 ROUNDS: <n>
 STATUS: clean | capped | failed
 OPEN_COMMENTS: <count of still-unaddressed addressable comments>
