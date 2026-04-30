@@ -100,6 +100,17 @@ requires human approval.
 
 ---
 
+## After opening a PR
+
+Immediately run the post-creation review-address loop on any PR this agent opens.
+Do not wait for the user to ask:
+
+```bash
+/jetpack-pr-review-cycle
+```
+
+---
+
 ## PR review workflow
 
 When asked to address PR feedback, fetch unresolved comments directly — do not wait for the user to paste them:
