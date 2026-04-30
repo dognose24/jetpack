@@ -124,6 +124,11 @@ its parent container and the parent has no fixed height.
      --body "..."
    ```
 7. PR description must include the Session Report below.
+8. Immediately after the PR is created, run the review cycle:
+   ```
+   /jetpack-pr-review-cycle
+   ```
+   (PR number is auto-detected from the current branch.)
 
 ## Session Report
 
