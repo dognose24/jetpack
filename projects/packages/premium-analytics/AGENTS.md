@@ -92,9 +92,9 @@ requires human approval.
 
 **Agent-verifiable (required before push):**
 - [ ] Build succeeds
+- [ ] UI verification passes: run `/premium-analytics-verify-ui` inside `jetpack-ai-sandbox` and confirm all three charts render without console errors
 
 **Human-verifiable (PR review):**
-- [ ] App opens in `wp-admin` without blank screen
 - [ ] Route navigation works
 - [ ] No shim-dependent regression
 
