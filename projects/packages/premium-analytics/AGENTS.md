@@ -102,8 +102,10 @@ requires human approval.
 
 ## After opening a PR
 
-Immediately run the post-creation review-address loop on any PR this agent opens.
-Do not wait for the user to ask:
+The `.github/workflows/pr-review-cycle.yml` workflow runs review cycle rounds automatically —
+no manual trigger needed when `ANTHROPIC_API_KEY` is configured as a repo secret.
+
+If the workflow is not available or you need to run a round manually:
 
 ```bash
 /jetpack-pr-review-cycle
