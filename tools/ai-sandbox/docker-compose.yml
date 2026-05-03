@@ -8,9 +8,84 @@ services:
       - ${HOME:?HOME not set}/.claude:/home/dev/.claude
       - ../../:/home/dev/jetpack
       - jetpack_node_modules:/home/dev/jetpack/node_modules
+      - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /home/dev/jetpack
     stdin_open: true
     tty: true
 
+  # ── wp-verify services ──────────────────────────────────────────────────────
+  # Start with: docker compose --profile wp-verify up -d
+  # Stop with:  docker compose --profile wp-verify down
+  # The agent controls these via the Docker socket mounted into jetpack-ai.
+
+  mysql:
+    image: mysql:8.0
+    container_name: jetpack-ai-mysql
+    profiles: ["wp-verify"]
+    environment:
+      MYSQL_ROOT_PASSWORD: wordpress
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+    volumes:
+      - wp_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "wordpress", "-pwordpress"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  wordpress:
+    image: wordpress:6.7-php8.4-apache
+    container_name: jetpack-ai-wordpress
+    profiles: ["wp-verify"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: mysql
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+    volumes:
+      - ../../projects/packages/premium-analytics:/var/www/html/wp-content/plugins/premium-analytics:ro
+      - ./wp-verify/mu-loader.php:/var/www/html/wp-content/mu-plugins/00-premium-analytics.php:ro
+      - wp_html:/var/www/html
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/wp-login.php"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  wpcli:
+    image: wordpress:cli
+    container_name: jetpack-ai-wpcli
+    profiles: ["wp-verify"]
+    depends_on:
+      wordpress:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: mysql
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+    volumes:
+      - wp_html:/var/www/html
+    # Install WordPress once on startup; subsequent runs are no-ops.
+    command: >
+      sh -c "
+        wp core is-installed --allow-root 2>/dev/null ||
+        wp core install
+          --url=http://wordpress
+          --title='Analytics Test'
+          --admin_user=admin
+          --admin_password=password
+          --admin_email=admin@test.local
+          --allow-root &&
+        sleep infinity
+      "
+
 volumes:
   jetpack_node_modules:
+  wp_mysql_data:
+  wp_html:

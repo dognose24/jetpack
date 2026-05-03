@@ -1,0 +1,160 @@
+---
+description: >
+  Start the wp-verify WordPress environment, build premium-analytics, navigate to the
+  Analytics admin page with Playwright, and assert all three charts rendered without errors.
+  Use after any premium-analytics UI change as the agent-verifiable step in the Definition
+  of Done. Requires the ai-sandbox with Docker socket mount and Playwright/Chromium installed.
+allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(pnpm:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Write, Read
+---
+
+# premium-analytics UI Verification
+
+Verify that all three charts render correctly in wp-admin after a premium-analytics build.
+
+## Pre-flight
+
+1. **Confirm Docker socket is accessible:**
+   ```bash
+   docker info > /dev/null 2>&1 || { echo "Docker socket not available — run inside jetpack-ai-sandbox"; exit 1; }
+   ```
+
+2. **Confirm Playwright is installed:**
+   ```bash
+   playwright --version > /dev/null 2>&1 || { echo "Playwright not found — rebuild sandbox image"; exit 1; }
+   ```
+
+3. **Confirm build artifacts exist:**
+   ```bash
+   test -f projects/packages/premium-analytics/build/build.php || {
+     echo "Build artifacts missing — run: pnpm --filter=@automattic/jetpack-premium-analytics build"
+     exit 1
+   }
+   ```
+   If missing, build first:
+   ```bash
+   CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build
+   ```
+
+## Step 1 — Start WordPress environment
+
+```bash
+COMPOSE_FILE=tools/ai-sandbox/docker-compose.yml
+
+docker compose -f "$COMPOSE_FILE" --profile wp-verify up -d
+
+echo "Waiting for WordPress to be ready..."
+TRIES=0
+until docker compose -f "$COMPOSE_FILE" exec -T wordpress curl -sf http://localhost/wp-login.php > /dev/null 2>&1; do
+  TRIES=$((TRIES + 1))
+  [ $TRIES -gt 30 ] && echo "WordPress did not start in time" && exit 1
+  sleep 5
+done
+echo "WordPress is up."
+```
+
+## Step 2 — Install WordPress (idempotent)
+
+```bash
+docker compose -f "$COMPOSE_FILE" exec -T wpcli \
+  wp core is-installed --allow-root 2>/dev/null || \
+docker compose -f "$COMPOSE_FILE" exec -T wpcli \
+  wp core install \
+    --url=http://wordpress \
+    --title="Analytics Test" \
+    --admin_user=admin \
+    --admin_password=password \
+    --admin_email=admin@test.local \
+    --allow-root
+```
+
+## Step 3 — Run Playwright verification
+
+Write and execute a one-shot Playwright script:
+
+```bash
+mkdir -p /tmp/pa-verify
+
+cat > /tmp/pa-verify/check.mjs << 'EOF'
+import { chromium } from 'playwright';
+
+const WP_BASE = 'http://wordpress';
+const ANALYTICS_URL = `${WP_BASE}/wp-admin/admin.php?page=jetpack-premium-analytics`;
+
+const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+const page = await browser.newPage();
+const errors = [];
+
+page.on('pageerror', err => errors.push(err.message));
+page.on('console', msg => {
+  if (msg.type() === 'error') errors.push(msg.text());
+});
+
+// Login
+await page.goto(`${WP_BASE}/wp-login.php`);
+await page.fill('#user_login', 'admin');
+await page.fill('#user_pass', 'password');
+await page.click('#wp-submit');
+await page.waitForURL('**/wp-admin/**');
+
+// Navigate to Analytics
+await page.goto(ANALYTICS_URL);
+
+// Wait for React to mount — the dashboard root div should appear
+await page.waitForSelector('.jetpack-premium-analytics-dashboard', { timeout: 15000 })
+  .catch(() => { throw new Error('Dashboard root not found — React may not have mounted'); });
+
+// Assert all three chart containers rendered
+const charts = await page.$$eval(
+  '.jetpack-premium-analytics-dashboard h2',
+  els => els.map(el => el.textContent.trim())
+);
+const expected = ['Traffic Sources', 'Page Views', 'Top Pages'];
+for (const title of expected) {
+  if (!charts.includes(title)) {
+    throw new Error(`Chart section "${title}" not found in rendered page`);
+  }
+}
+
+// Screenshot for the PR
+await page.screenshot({ path: '/tmp/pa-verify/analytics-dashboard.png', fullPage: false });
+
+await browser.close();
+
+if (errors.length) {
+  console.error('Console errors detected:\n' + errors.join('\n'));
+  process.exit(1);
+}
+
+console.log('✓ All three charts rendered without errors');
+console.log('Screenshot saved to /tmp/pa-verify/analytics-dashboard.png');
+EOF
+
+node /tmp/pa-verify/check.mjs
+```
+
+If the script exits 0, verification passes. If it exits non-zero, the error message will indicate what failed.
+
+## Step 4 — Report result
+
+On success:
+- Log: `UI verification passed — all three charts rendered`
+- Attach screenshot path to the PR comment if running inside `jetpack-pr-review-cycle`
+
+On failure:
+- Log the full error
+- Do NOT mark the Definition of Done as complete
+- Fix the root cause and re-run from Step 3 (WordPress stays up between runs)
+
+## Teardown (optional)
+
+Leave WordPress running during the review cycle so subsequent verification rounds skip Step 1–2. Tear down only at the end of the cycle or when explicitly requested:
+
+```bash
+docker compose -f tools/ai-sandbox/docker-compose.yml --profile wp-verify down
+```
+
+## HARD rules
+
+- Never run this skill outside the `jetpack-ai-sandbox` container — the Docker socket gives host-level access.
+- Never commit `/tmp/pa-verify/` contents.
+- The admin credentials (`admin` / `password`) are for the throwaway test environment only — do not reuse elsewhere.

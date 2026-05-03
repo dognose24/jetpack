@@ -33,6 +33,26 @@ ENV PATH="/usr/local/lib/nodejs/bin:${PATH}"
 
 RUN npm install -g pnpm@10.28.2 @anthropic-ai/claude-code@2.1.118
 
+# Install Docker CLI (for wp-verify: controlling WordPress/MySQL containers via host socket)
+RUN install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc && \
+    chmod a+r /etc/apt/keyrings/docker.asc && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" \
+      > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && apt-get install -y docker-ce-cli docker-compose-plugin && \
+    rm -rf /var/lib/apt/lists/* && \
+    usermod -aG docker dev 2>/dev/null || true
+
+# Install Playwright + Chromium for UI verification
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+RUN apt-get update && apt-get install -y \
+    libnss3 libnspr4 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 \
+    libcups2 libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 \
+    libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g playwright \
+    && playwright install chromium
+
 # Install Composer 2.9.2
 RUN curl -fsSL https://getcomposer.org/installer -o composer-setup.php && \
     EXPECTED=$(curl -fsSL https://composer.github.io/installer.sig) && \
