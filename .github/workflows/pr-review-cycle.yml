@@ -42,13 +42,18 @@ permissions:
 
 jobs:
   review-cycle:
-    # Gate: only fire on events from AI reviewers we trust, a new PR, or manual dispatch.
-    # This prevents the workflow from triggering on every human comment or its own output.
+    # Gate: only fire on same-repo PRs from AI reviewers we trust, a new PR, or manual dispatch.
+    # Same-repo check prevents a fork author from triggering this workflow (with ANTHROPIC_API_KEY
+    # and contents: write) by engineering a trusted-bot response on their PR.
     if: |
       github.event_name == 'workflow_dispatch'
-      || github.event_name == 'pull_request'
+      || (
+          github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository
+         )
       || (
           github.event_name == 'pull_request_review'
+          && github.event.pull_request.head.repo.full_name == github.repository
           && contains(
                fromJSON('["Copilot","copilot-pull-request-reviewer[bot]","github-copilot[bot]","claude[bot]","claude-code[bot]","copilot-swe-agent"]'),
                github.event.review.user.login
@@ -83,7 +88,13 @@ jobs:
             pull_request_review)        PR="$PR_FROM_PR" ;;
             issue_comment)              PR="$PR_FROM_ISSUE" ;;
           esac
-          BRANCH=$(gh pr view "$PR" --repo "$REPO" --json headRefName -q .headRefName)
+          PR_JSON=$(gh pr view "$PR" --repo "$REPO" --json headRefName,headRepository,headRepositoryOwner)
+          HEAD_REPO=$(echo "$PR_JSON" | jq -r '(.headRepositoryOwner.login) + "/" + (.headRepository.name)')
+          if [ "$EVENT_NAME" != "workflow_dispatch" ] && [ "$HEAD_REPO" != "$REPO" ]; then
+            echo "::error::PR #$PR is from a fork ($HEAD_REPO). Refusing to run with write permissions on fork code."
+            exit 1
+          fi
+          BRANCH=$(echo "$PR_JSON" | jq -r .headRefName)
           echo "pr=$PR"         >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
@@ -126,13 +137,27 @@ jobs:
                snapshot → filter → address → CI → rebase → push → re-request review — then stop.
             5. Read .claude/pr-review-state.json at the start of the round and write it at the end
                to track which comment IDs have already been addressed across runs.
+               IMPORTANT: commit .claude/pr-review-state.json to the branch along with any code
+               changes at the end of each round so the state survives to the next workflow run
+               (GitHub Actions workspaces are ephemeral — the file must be in git to persist).
             6. Always use "${{ github.repository }}" as REPO (do not auto-detect).
           claude_args: >-
             --max-turns 40
             --allowedTools
-            "Bash(git *)"
-            "Bash(gh *)"
-            "Bash(pnpm *)"
+            "Bash(git log*)"
+            "Bash(git diff*)"
+            "Bash(git status*)"
+            "Bash(git add*)"
+            "Bash(git commit*)"
+            "Bash(git push*)"
+            "Bash(git fetch*)"
+            "Bash(git rebase*)"
+            "Bash(git stash*)"
+            "Bash(gh pr*)"
+            "Bash(gh api*)"
+            "Bash(pnpm build*)"
+            "Bash(pnpm lint*)"
+            "Bash(pnpm test*)"
             Read
             Write
             Edit
