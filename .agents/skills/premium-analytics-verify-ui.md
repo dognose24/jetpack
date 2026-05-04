@@ -39,11 +39,20 @@ Verify that the analytics dashboard mounts correctly in wp-admin after a premium
 ## Step 1 — Start WordPress environment
 
 ```bash
+# Detect the host-side path of the jetpack repo.
+# docker compose runs via the host Docker socket; the daemon resolves bind-mount
+# paths against the HOST filesystem, not the sandbox — so we must pass the host path.
+JETPACK_HOST_PATH=$(docker inspect jetpack-ai-sandbox \
+  --format '{{range .Mounts}}{{if eq .Destination "/home/dev/jetpack"}}{{.Source}}{{end}}{{end}}')
+[ -z "$JETPACK_HOST_PATH" ] && { echo "Could not detect host jetpack path — is the container named jetpack-ai-sandbox?"; exit 1; }
+export JETPACK_HOST_PATH
+
 BASE_FILE=tools/ai-sandbox/docker-compose.yml
 OVERRIDE_FILE=tools/ai-sandbox/docker-compose.wp-verify.yml
-COMPOSE_ARGS="-f $BASE_FILE -f $OVERRIDE_FILE --project-directory tools/ai-sandbox"
+COMPOSE_ARGS="-f $BASE_FILE -f $OVERRIDE_FILE --project-directory tools/ai-sandbox --profile wp-verify"
 
-docker compose $COMPOSE_ARGS --profile wp-verify up -d
+# Name services explicitly to avoid accidentally starting/modifying jetpack-ai itself.
+docker compose $COMPOSE_ARGS up -d mysql wordpress wpcli
 
 echo "Waiting for WordPress to be ready..."
 TRIES=0
@@ -150,9 +159,12 @@ On failure:
 Leave WordPress running during the review cycle so subsequent verification rounds skip Step 1–2. Tear down only at the end of the cycle or when explicitly requested:
 
 ```bash
-BASE_FILE=tools/ai-sandbox/docker-compose.yml
-OVERRIDE_FILE=tools/ai-sandbox/docker-compose.wp-verify.yml
-docker compose -f $BASE_FILE -f $OVERRIDE_FILE --project-directory tools/ai-sandbox --profile wp-verify down
+docker compose \
+  -f tools/ai-sandbox/docker-compose.yml \
+  -f tools/ai-sandbox/docker-compose.wp-verify.yml \
+  --project-directory tools/ai-sandbox \
+  --profile wp-verify \
+  down mysql wordpress wpcli
 ```
 
 ## HARD rules

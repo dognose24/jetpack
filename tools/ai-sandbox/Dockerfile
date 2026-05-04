@@ -63,6 +63,7 @@ RUN curl -fsSL https://getcomposer.org/installer -o composer-setup.php && \
 RUN useradd -ms /bin/bash dev && \
     mkdir -p /home/dev/jetpack/node_modules && \
     chown -R dev:dev /home/dev/jetpack && \
+    groupadd -f docker && \
     usermod -aG docker dev
 
 COPY entrypoint.sh /entrypoint.sh

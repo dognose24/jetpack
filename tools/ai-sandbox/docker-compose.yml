@@ -47,8 +47,11 @@ services:
       WORDPRESS_DB_PASSWORD: wordpress
       WORDPRESS_DB_NAME: wordpress
     volumes:
-      - ../../projects/packages/premium-analytics:/var/www/html/wp-content/plugins/premium-analytics:ro
-      - ./wp-verify/mu-loader.php:/var/www/html/wp-content/mu-plugins/00-premium-analytics.php:ro
+      # JETPACK_HOST_PATH must be set to the jetpack root on the HOST filesystem.
+      # When running docker compose from inside the sandbox the Docker daemon resolves
+      # paths on the host, not the sandbox — set automatically by the wp-verify skill.
+      - ${JETPACK_HOST_PATH:?JETPACK_HOST_PATH not set — see .agents/skills/premium-analytics-verify-ui.md}/projects/packages/premium-analytics:/var/www/html/wp-content/plugins/premium-analytics:ro
+      - ${JETPACK_HOST_PATH}/tools/ai-sandbox/wp-verify/mu-loader.php:/var/www/html/wp-content/mu-plugins/00-premium-analytics.php:ro
       - wp_html:/var/www/html
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost/wp-login.php"]
@@ -57,7 +60,7 @@ services:
       retries: 12
 
   wpcli:
-    image: wordpress:cli
+    image: wordpress:cli-2.11.0-php8.4
     container_name: jetpack-ai-wpcli
     profiles: ["wp-verify"]
     depends_on:
