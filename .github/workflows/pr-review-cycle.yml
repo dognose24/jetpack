@@ -10,6 +10,9 @@ on:
   # Kickoff: PR just opened or promoted from draft
   pull_request:
     types: [opened, ready_for_review]
+    paths:
+      - 'projects/packages/premium-analytics/**'
+      - 'tools/ai-sandbox/**'
 
   # Follow-up: an AI reviewer (Copilot / claude) posted a review
   pull_request_review:
