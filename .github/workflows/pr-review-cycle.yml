@@ -7,7 +7,7 @@ name: PR Review Cycle
 # Required secret: ANTHROPIC_API_KEY (repo → Settings → Secrets and variables → Actions)
 
 on:
-  # Kickoff: PR just opened or promoted from draft
+  # Kickoff: PR promoted from draft or opened as non-draft
   pull_request:
     types: [opened, ready_for_review]
     paths:
@@ -53,6 +53,7 @@ jobs:
       || (
           github.event_name == 'pull_request'
           && github.event.pull_request.head.repo.full_name == github.repository
+          && github.event.pull_request.draft == false
          )
       || (
           github.event_name == 'pull_request_review'
@@ -93,7 +94,7 @@ jobs:
           esac
           PR_JSON=$(gh pr view "$PR" --repo "$REPO" --json headRefName,headRepository,headRepositoryOwner)
           HEAD_REPO=$(echo "$PR_JSON" | jq -r '(.headRepositoryOwner.login) + "/" + (.headRepository.name)')
-          if [ "$EVENT_NAME" != "workflow_dispatch" ] && [ "$HEAD_REPO" != "$REPO" ]; then
+          if [ "$HEAD_REPO" != "$REPO" ]; then
             echo "::error::PR #$PR is from a fork ($HEAD_REPO). Refusing to run with write permissions on fork code."
             exit 1
           fi
@@ -140,9 +141,11 @@ jobs:
                snapshot → filter → address → CI → rebase → push → re-request review — then stop.
             5. Read .claude/pr-review-state.json at the start of the round and write it at the end
                to track which comment IDs have already been addressed across runs.
-               IMPORTANT: commit .claude/pr-review-state.json to the branch along with any code
-               changes at the end of each round so the state survives to the next workflow run
-               (GitHub Actions workspaces are ephemeral — the file must be in git to persist).
+               IMPORTANT — GitHub Actions overrides for state file:
+               - Do NOT run `echo ... >> .git/info/exclude`. The skill does this locally, but
+                 in Actions the workspace is ephemeral and state must be in git to survive.
+               - Commit .claude/pr-review-state.json to the branch along with code changes
+                 at the end of each round so it is present when the next run checks out.
             6. Always use "${{ github.repository }}" as REPO (do not auto-detect).
           claude_args: >-
             --max-turns 40
@@ -158,6 +161,7 @@ jobs:
             "Bash(git stash*)"
             "Bash(gh pr*)"
             "Bash(gh api*)"
+            "Bash(gh run*)"
             "Bash(pnpm build*)"
             "Bash(pnpm lint*)"
             "Bash(pnpm test*)"
