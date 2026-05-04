@@ -21,7 +21,7 @@ Verify that the analytics dashboard mounts correctly in wp-admin after a premium
 
 2. **Confirm Playwright is installed:**
    ```bash
-   npx playwright --version > /dev/null 2>&1 || { echo "Playwright not found — rebuild sandbox image"; exit 1; }
+   playwright --version > /dev/null 2>&1 || { echo "Playwright not found — rebuild sandbox image"; exit 1; }
    ```
 
 3. **Confirm build artifacts exist:**
@@ -138,7 +138,7 @@ console.log('✓ Analytics dashboard mounted without errors');
 console.log('Screenshot saved to /tmp/pa-verify/analytics-dashboard.png');
 EOF
 
-node /tmp/pa-verify/check.mjs
+NODE_PATH=$(npm root -g) node /tmp/pa-verify/check.mjs
 ```
 
 If the script exits 0, verification passes. If it exits non-zero, the error message will indicate what failed.
@@ -164,7 +164,7 @@ docker compose \
   -f tools/ai-sandbox/docker-compose.wp-verify.yml \
   --project-directory tools/ai-sandbox \
   --profile wp-verify \
-  down mysql wordpress wpcli
+  down
 ```
 
 ## HARD rules
