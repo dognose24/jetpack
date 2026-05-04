@@ -136,7 +136,7 @@ jobs:
         uses: anthropics/claude-code-action@df37d2f0760a4b5683a6e617c9325bc1a36443f6 # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          allowed_bots: "copilot-swe-agent,copilot-pull-request-reviewer[bot],github-copilot[bot],claude[bot],claude-code[bot]"
+          allowed_bots: "Copilot,copilot-swe-agent,copilot-pull-request-reviewer[bot],github-copilot[bot],claude[bot],claude-code[bot]"
           prompt: |
             Run one round of the Jetpack PR review cycle.
 
@@ -179,6 +179,10 @@ jobs:
             "Bash(git rebase *)"
             "Bash(git stash *)"
             "Bash(git rev-list *)"
+            "Bash(git rev-parse *)"
+            "Bash(git branch *)"
+            "Bash(mkdir *)"
+            "Bash(test *)"
             "Bash(gh pr *)"
             "Bash(gh api *)"
             "Bash(gh run *)"
