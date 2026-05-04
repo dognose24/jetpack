@@ -46,9 +46,11 @@ permissions:
 
 jobs:
   review-cycle:
-    # Gate: only fire on same-repo PRs from AI reviewers we trust, a new PR, or manual dispatch.
-    # Same-repo check prevents a fork author from triggering this workflow (with ANTHROPIC_API_KEY
-    # and contents: write) by engineering a trusted-bot response on their PR.
+    # Gate: only fire on trusted-actor events. Same-repo checks for pull_request and
+    # pull_request_review prevent a fork author from triggering this workflow (with
+    # ANTHROPIC_API_KEY and contents: write) via an engineered trusted-bot response.
+    # issue_comment cannot access head.repo in the expression context, so the same-repo
+    # check is deferred to the "Resolve PR number" step (which exits with skip=true for forks).
     if: |
       github.event_name == 'workflow_dispatch'
       || (
@@ -134,7 +136,7 @@ jobs:
         uses: anthropics/claude-code-action@df37d2f0760a4b5683a6e617c9325bc1a36443f6 # v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          allowed_bots: "copilot-swe-agent,copilot-pull-request-reviewer[bot],github-copilot[bot]"
+          allowed_bots: "copilot-swe-agent,copilot-pull-request-reviewer[bot],github-copilot[bot],claude[bot],claude-code[bot]"
           prompt: |
             Run one round of the Jetpack PR review cycle.
 

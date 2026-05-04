@@ -104,6 +104,8 @@ requires human approval.
 
 The `.github/workflows/pr-review-cycle.yml` workflow runs review cycle rounds automatically —
 no manual trigger needed when `ANTHROPIC_API_KEY` is configured as a repo secret.
+Automatic runs only apply to same-repo PR branches; fork PRs are skipped to avoid
+exposing secrets on untrusted code.
 
 If the workflow is not available or you need to run a round manually:
 
