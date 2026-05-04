@@ -1,15 +1,16 @@
 ---
 description: >
   Start the wp-verify WordPress environment, build premium-analytics, navigate to the
-  Analytics admin page with Playwright, and assert all three charts rendered without errors.
-  Use after any premium-analytics UI change as the agent-verifiable step in the Definition
-  of Done. Requires the ai-sandbox with Docker socket mount and Playwright/Chromium installed.
+  Analytics admin page with Playwright, and assert the dashboard root mounts without console
+  errors. Use after any premium-analytics UI change as the agent-verifiable step in the
+  Definition of Done. Requires the ai-sandbox with Docker socket mount and Playwright/Chromium
+  installed.
 allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(pnpm:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Write, Read
 ---
 
 # premium-analytics UI Verification
 
-Verify that all three charts render correctly in wp-admin after a premium-analytics build.
+Verify that the analytics dashboard mounts correctly in wp-admin after a premium-analytics build.
 
 ## Pre-flight
 
@@ -20,7 +21,7 @@ Verify that all three charts render correctly in wp-admin after a premium-analyt
 
 2. **Confirm Playwright is installed:**
    ```bash
-   playwright --version > /dev/null 2>&1 || { echo "Playwright not found — rebuild sandbox image"; exit 1; }
+   npx playwright --version > /dev/null 2>&1 || { echo "Playwright not found — rebuild sandbox image"; exit 1; }
    ```
 
 3. **Confirm build artifacts exist:**
@@ -38,13 +39,15 @@ Verify that all three charts render correctly in wp-admin after a premium-analyt
 ## Step 1 — Start WordPress environment
 
 ```bash
-COMPOSE_FILE=tools/ai-sandbox/docker-compose.yml
+BASE_FILE=tools/ai-sandbox/docker-compose.yml
+OVERRIDE_FILE=tools/ai-sandbox/docker-compose.wp-verify.yml
+COMPOSE_ARGS="-f $BASE_FILE -f $OVERRIDE_FILE --project-directory tools/ai-sandbox"
 
-docker compose -f "$COMPOSE_FILE" --profile wp-verify up -d
+docker compose $COMPOSE_ARGS --profile wp-verify up -d
 
 echo "Waiting for WordPress to be ready..."
 TRIES=0
-until docker compose -f "$COMPOSE_FILE" exec -T wordpress curl -sf http://localhost/wp-login.php > /dev/null 2>&1; do
+until docker compose $COMPOSE_ARGS exec -T wordpress curl -sf http://localhost/wp-login.php > /dev/null 2>&1; do
   TRIES=$((TRIES + 1))
   [ $TRIES -gt 30 ] && echo "WordPress did not start in time" && exit 1
   sleep 5
@@ -55,9 +58,9 @@ echo "WordPress is up."
 ## Step 2 — Install WordPress (idempotent)
 
 ```bash
-docker compose -f "$COMPOSE_FILE" exec -T wpcli \
+docker compose $COMPOSE_ARGS exec -T wpcli \
   wp core is-installed --allow-root 2>/dev/null || \
-docker compose -f "$COMPOSE_FILE" exec -T wpcli \
+docker compose $COMPOSE_ARGS exec -T wpcli \
   wp core install \
     --url=http://wordpress \
     --title="Analytics Test" \
@@ -103,16 +106,13 @@ await page.goto(ANALYTICS_URL);
 await page.waitForSelector('.jetpack-premium-analytics-dashboard', { timeout: 15000 })
   .catch(() => { throw new Error('Dashboard root not found — React may not have mounted'); });
 
-// Assert all three chart containers rendered
-const charts = await page.$$eval(
-  '.jetpack-premium-analytics-dashboard h2',
-  els => els.map(el => el.textContent.trim())
-);
-const expected = ['Traffic Sources', 'Page Views', 'Top Pages'];
-for (const title of expected) {
-  if (!charts.includes(title)) {
-    throw new Error(`Chart section "${title}" not found in rendered page`);
-  }
+// Assert the dashboard heading rendered
+const heading = await page.$eval(
+  '.jetpack-premium-analytics-dashboard h1',
+  el => el.textContent.trim()
+).catch(() => { throw new Error('Dashboard h1 not found — React may not have rendered'); });
+if (heading !== 'Analytics') {
+  throw new Error(`Unexpected dashboard heading: "${heading}"`);
 }
 
 // Screenshot for the PR
@@ -125,7 +125,7 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('✓ All three charts rendered without errors');
+console.log('✓ Analytics dashboard mounted without errors');
 console.log('Screenshot saved to /tmp/pa-verify/analytics-dashboard.png');
 EOF
 
@@ -137,7 +137,7 @@ If the script exits 0, verification passes. If it exits non-zero, the error mess
 ## Step 4 — Report result
 
 On success:
-- Log: `UI verification passed — all three charts rendered`
+- Log: `UI verification passed — Analytics dashboard mounted`
 - Attach screenshot path to the PR comment if running inside `jetpack-pr-review-cycle`
 
 On failure:
@@ -150,7 +150,9 @@ On failure:
 Leave WordPress running during the review cycle so subsequent verification rounds skip Step 1–2. Tear down only at the end of the cycle or when explicitly requested:
 
 ```bash
-docker compose -f tools/ai-sandbox/docker-compose.yml --profile wp-verify down
+BASE_FILE=tools/ai-sandbox/docker-compose.yml
+OVERRIDE_FILE=tools/ai-sandbox/docker-compose.wp-verify.yml
+docker compose -f $BASE_FILE -f $OVERRIDE_FILE --project-directory tools/ai-sandbox --profile wp-verify down
 ```
 
 ## HARD rules

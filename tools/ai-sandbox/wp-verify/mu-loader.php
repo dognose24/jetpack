@@ -8,11 +8,11 @@
  * @package automattic/jetpack-premium-analytics
  */
 
-$src_dir   = WP_CONTENT_DIR . '/plugins/premium-analytics/src/';
-$src_files = glob( $src_dir . '*.php' );
-foreach ( $src_files ? $src_files : array() as $file ) {
-	require_once $file;
+$entry = WP_CONTENT_DIR . '/plugins/premium-analytics/src/class-analytics.php';
+if ( ! file_exists( $entry ) ) {
+	wp_die( 'premium-analytics entry point not found: ' . esc_html( $entry ) );
 }
+require_once $entry;
 
 add_action(
 	'plugins_loaded',

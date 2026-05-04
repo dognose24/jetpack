@@ -8,7 +8,6 @@ services:
       - ${HOME:?HOME not set}/.claude:/home/dev/.claude
       - ../../:/home/dev/jetpack
       - jetpack_node_modules:/home/dev/jetpack/node_modules
-      - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /home/dev/jetpack
     stdin_open: true
     tty: true
@@ -82,6 +81,8 @@ services:
           --admin_password=password
           --admin_email=admin@test.local
           --allow-root &&
+        wp plugin is-installed gutenberg --allow-root 2>/dev/null ||
+        wp plugin install gutenberg --activate --allow-root &&
         sleep infinity
       "
 
