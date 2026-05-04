@@ -168,6 +168,7 @@ jobs:
             --allowedTools
             "Bash(git log *)"
             "Bash(git diff *)"
+            "Bash(git show *)"
             "Bash(git status *)"
             "Bash(git add *)"
             "Bash(git commit *)"
@@ -175,12 +176,14 @@ jobs:
             "Bash(git fetch *)"
             "Bash(git rebase *)"
             "Bash(git stash *)"
+            "Bash(git rev-list *)"
             "Bash(gh pr *)"
             "Bash(gh api *)"
             "Bash(gh run *)"
             "Bash(pnpm build *)"
             "Bash(pnpm lint *)"
             "Bash(pnpm test *)"
+            "Bash(jq *)"
             Read
             Write
             Edit
