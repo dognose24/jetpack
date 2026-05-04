@@ -176,9 +176,9 @@ jobs:
                - Commit .claude/pr-review-state.json to the branch along with code changes
                  at the end of each round so it is present when the next run checks out.
             6. Always use "${{ github.repository }}" as REPO (do not auto-detect).
-            7. Skip the skill's pre-flight checks (gh auth status, gh repo view, git rev-parse
-               for BRANCH). Auth and repo context are already set up by the workflow; BRANCH
-               is provided above.
+            7. Skip the skill's pre-flight check for gh repo view and git rev-parse for BRANCH.
+               Auth context is already set up by the workflow (REPO and BRANCH are provided
+               above). Do NOT call gh repo view to auto-detect REPO.
           claude_args: >-
             --max-turns 40
             --allowedTools
@@ -200,6 +200,8 @@ jobs:
             "Bash(gh pr *)"
             "Bash(gh api *)"
             "Bash(gh run *)"
+            "Bash(gh auth status)"
+            "Bash(tail *)"
             "Bash(pnpm build *)"
             "Bash(pnpm lint *)"
             "Bash(pnpm test *)"
