@@ -3,7 +3,7 @@
  * Must-use plugin: bootstraps premium-analytics standalone in the wp-verify environment.
  *
  * The package has no runtime composer dependencies (only php >= 7.2), so we load
- * the source classes directly via classmap instead of requiring a composer autoloader.
+ * the entry file directly via require_once (no classmap or composer autoloader needed).
  *
  * @package automattic/jetpack-premium-analytics
  */

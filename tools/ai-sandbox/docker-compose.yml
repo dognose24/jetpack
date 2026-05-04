@@ -74,15 +74,15 @@ services:
     command: >
       sh -c "
         wp core is-installed --allow-root 2>/dev/null ||
-        wp core install
-          --url=http://wordpress
-          --title='Analytics Test'
-          --admin_user=admin
-          --admin_password=password
-          --admin_email=admin@test.local
-          --allow-root &&
+          wp core install
+            --url=http://wordpress
+            --title='Analytics Test'
+            --admin_user=admin
+            --admin_password=password
+            --admin_email=admin@test.local
+            --allow-root ;
         wp plugin is-installed gutenberg --allow-root 2>/dev/null ||
-        wp plugin install gutenberg --activate --allow-root &&
+          wp plugin install gutenberg --activate --allow-root ;
         sleep infinity
       "
 

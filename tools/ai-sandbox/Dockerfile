@@ -49,7 +49,7 @@ RUN apt-get update && apt-get install -y \
     libcups2 libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 \
     libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install -g playwright \
+    && npm install -g playwright@1.48.2 \
     && playwright install chromium
 
 # Install Composer 2.9.2
