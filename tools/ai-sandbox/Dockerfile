@@ -40,8 +40,7 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" \
       > /etc/apt/sources.list.d/docker.list && \
     apt-get update && apt-get install -y docker-ce-cli docker-compose-plugin && \
-    rm -rf /var/lib/apt/lists/* && \
-    usermod -aG docker dev 2>/dev/null || true
+    rm -rf /var/lib/apt/lists/*
 
 # Install Playwright + Chromium for UI verification
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
@@ -63,7 +62,8 @@ RUN curl -fsSL https://getcomposer.org/installer -o composer-setup.php && \
 
 RUN useradd -ms /bin/bash dev && \
     mkdir -p /home/dev/jetpack/node_modules && \
-    chown -R dev:dev /home/dev/jetpack
+    chown -R dev:dev /home/dev/jetpack && \
+    usermod -aG docker dev
 
 COPY entrypoint.sh /entrypoint.sh
 

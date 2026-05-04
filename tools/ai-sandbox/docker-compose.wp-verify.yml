@@ -1,0 +1,14 @@
+# Compose override that grants jetpack-ai-sandbox host Docker socket access.
+# Required only when running the wp-verify profile (the agent controls WP/MySQL
+# containers via the socket). Not included in the default sandbox start so the
+# default environment does not carry host-level Docker control.
+#
+# Usage:
+#   docker compose -f tools/ai-sandbox/docker-compose.yml \
+#                  -f tools/ai-sandbox/docker-compose.wp-verify.yml \
+#                  --project-directory tools/ai-sandbox \
+#                  --profile wp-verify up -d
+services:
+  jetpack-ai:
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
