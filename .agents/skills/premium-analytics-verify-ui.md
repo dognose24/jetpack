@@ -86,8 +86,9 @@ Write and execute a one-shot Playwright script:
 ```bash
 mkdir -p /tmp/pa-verify
 
-cat > /tmp/pa-verify/check.mjs << 'EOF'
-import { chromium } from 'playwright';
+cat > /tmp/pa-verify/check.cjs << 'EOF'
+// CommonJS so NODE_PATH is honoured when resolving the globally-installed playwright package.
+const { chromium } = require('playwright');
 
 const WP_BASE = 'http://wordpress';
 const ANALYTICS_URL = `${WP_BASE}/wp-admin/admin.php?page=jetpack-premium-analytics`;
@@ -138,7 +139,7 @@ console.log('✓ Analytics dashboard mounted without errors');
 console.log('Screenshot saved to /tmp/pa-verify/analytics-dashboard.png');
 EOF
 
-NODE_PATH=$(npm root -g) node /tmp/pa-verify/check.mjs
+NODE_PATH=$(npm root -g) node /tmp/pa-verify/check.cjs
 ```
 
 If the script exits 0, verification passes. If it exits non-zero, the error message will indicate what failed.

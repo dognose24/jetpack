@@ -10,7 +10,10 @@
 
 $entry = WP_CONTENT_DIR . '/plugins/premium-analytics/src/class-analytics.php';
 if ( ! file_exists( $entry ) ) {
-	wp_die( 'premium-analytics entry point not found: ' . esc_html( $entry ) );
+	// Log the full path server-side only; don't expose filesystem layout in the browser.
+	// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- test environment only.
+	error_log( 'premium-analytics mu-loader: entry point not found: ' . $entry );
+	wp_die( 'premium-analytics plugin failed to load. Check the server error log.' );
 }
 require_once $entry;
 
