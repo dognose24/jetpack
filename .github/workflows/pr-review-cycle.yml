@@ -1,10 +1,11 @@
 name: PR Review Cycle
 
-# Event-driven replacement for the session-dependent ScheduleWakeup approach.
-# Each workflow run executes one round of the review cycle; GitHub events act
-# as the timer so no in-process sleep is needed.
-#
-# Required secret: ANTHROPIC_API_KEY (repo → Settings → Secrets and variables → Actions)
+# Event-driven PR review cycle — Copilot-only mode.
+# On PR open: adds Copilot as a reviewer.
+# On each Copilot review: re-requests review so Copilot sees the latest changes.
+# No ANTHROPIC_API_KEY required in this mode.
+# To re-enable Claude-based auto-addressing, restore the anthropics/claude-code-action step
+# and set ANTHROPIC_API_KEY in repo secrets.
 
 on:
   # Kickoff: PR promoted from draft or opened as non-draft
@@ -38,11 +39,9 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
   issues: write
-  actions: read
-  id-token: write
 
 jobs:
   review-cycle:
@@ -128,86 +127,20 @@ jobs:
           echo "pr=$PR"         >> "$GITHUB_OUTPUT"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout PR branch
+      - name: Request Copilot review
         if: steps.ctx.outputs.skip != 'true'
-        uses: actions/checkout@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ steps.ctx.outputs.branch }}
-          fetch-depth: 0
-
-      - name: Configure git identity
-        if: steps.ctx.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ steps.ctx.outputs.pr }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Run one PR review cycle round
-        if: steps.ctx.outputs.skip != 'true'
-        uses: anthropics/claude-code-action@df37d2f0760a4b5683a6e617c9325bc1a36443f6 # v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          allowed_bots: "Copilot,copilot-swe-agent,copilot-pull-request-reviewer[bot],github-copilot[bot],claude[bot],claude-code[bot]"
-          prompt: |
-            Run one round of the Jetpack PR review cycle.
-
-            Context:
-            - Repo:   ${{ github.repository }}
-            - PR:     #${{ steps.ctx.outputs.pr }}
-            - Branch: ${{ steps.ctx.outputs.branch }}
-            - Trigger: ${{ github.event_name }}
-
-            Follow the instructions in .claude/commands/jetpack-pr-review-cycle.md with these
-            GitHub Actions overrides — they take priority over anything in the skill file:
-
-            1. NEVER call ScheduleWakeup.  GitHub events are the timer; there is no need for
-               in-process scheduling.
-            2. NEVER sleep.  Complete one round and stop.
-            3. If the trigger is "pull_request" (PR just opened or made ready):
-               run the Round 1 kickoff only — add @copilot reviewer, post
-               "@claude please review this PR." — then stop.
-            4. For all other triggers: run one follow-up round —
-               snapshot → filter → address → CI → rebase → push → re-request review — then stop.
-            5. Read .claude/pr-review-state.json at the start of the round and write it at the end
-               to track which comment IDs have already been addressed across runs.
-               IMPORTANT — GitHub Actions overrides for state file:
-               - Do NOT run `echo ... >> .git/info/exclude`. The skill does this locally, but
-                 in Actions the workspace is ephemeral and state must be in git to survive.
-               - Commit .claude/pr-review-state.json to the branch along with code changes
-                 at the end of each round so it is present when the next run checks out.
-            6. Always use "${{ github.repository }}" as REPO (do not auto-detect).
-            7. Skip the skill's pre-flight check for gh repo view and git rev-parse for BRANCH.
-               Auth context is already set up by the workflow (REPO and BRANCH are provided
-               above). Do NOT call gh repo view to auto-detect REPO.
-          claude_args: >-
-            --max-turns 40
-            --allowedTools
-            "Bash(git log *)"
-            "Bash(git diff *)"
-            "Bash(git show *)"
-            "Bash(git status *)"
-            "Bash(git add *)"
-            "Bash(git commit *)"
-            "Bash(git push *)"
-            "Bash(git fetch *)"
-            "Bash(git rebase *)"
-            "Bash(git stash *)"
-            "Bash(git rev-list *)"
-            "Bash(git rev-parse *)"
-            "Bash(git branch *)"
-            "Bash(mkdir *)"
-            "Bash(test *)"
-            "Bash(gh pr *)"
-            "Bash(gh api *)"
-            "Bash(gh run *)"
-            "Bash(gh auth status)"
-            "Bash(tail *)"
-            "Bash(pnpm build *)"
-            "Bash(pnpm lint *)"
-            "Bash(pnpm test *)"
-            "Bash(jq *)"
-            Read
-            Write
-            Edit
-            Glob
-            Grep
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # Kickoff: add Copilot as reviewer on PR open / ready-for-review.
+            gh pr edit "$PR" --repo "$REPO" --add-reviewer Copilot 2>/dev/null \
+              || echo "Copilot reviewer add skipped (may already be assigned or unavailable)"
+          else
+            # Follow-up: re-request Copilot review so it sees the latest changes.
+            gh pr comment "$PR" --repo "$REPO" \
+              --body "@copilot please re-review — latest changes have been pushed."
+          fi
