@@ -88,55 +88,58 @@ mkdir -p /tmp/pa-verify
 
 cat > /tmp/pa-verify/check.cjs << 'EOF'
 // CommonJS so NODE_PATH is honoured when resolving the globally-installed playwright package.
+// Wrapped in an async IIFE because top-level await is not valid in CommonJS.
 const { chromium } = require('playwright');
 
-const WP_BASE = 'http://wordpress';
-const ANALYTICS_URL = `${WP_BASE}/wp-admin/admin.php?page=jetpack-premium-analytics`;
+(async () => {
+  const WP_BASE = 'http://wordpress';
+  const ANALYTICS_URL = `${WP_BASE}/wp-admin/admin.php?page=jetpack-premium-analytics`;
 
-const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-const page = await browser.newPage();
-const errors = [];
+  const browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+  const page = await browser.newPage();
+  const errors = [];
 
-page.on('pageerror', err => errors.push(err.message));
-page.on('console', msg => {
-  if (msg.type() === 'error') errors.push(msg.text());
-});
+  page.on('pageerror', err => errors.push(err.message));
+  page.on('console', msg => {
+    if (msg.type() === 'error') errors.push(msg.text());
+  });
 
-// Login
-await page.goto(`${WP_BASE}/wp-login.php`);
-await page.fill('#user_login', 'admin');
-await page.fill('#user_pass', 'password');
-await page.click('#wp-submit');
-await page.waitForURL('**/wp-admin/**');
+  // Login
+  await page.goto(`${WP_BASE}/wp-login.php`);
+  await page.fill('#user_login', 'admin');
+  await page.fill('#user_pass', 'password');
+  await page.click('#wp-submit');
+  await page.waitForURL('**/wp-admin/**');
 
-// Navigate to Analytics
-await page.goto(ANALYTICS_URL);
+  // Navigate to Analytics
+  await page.goto(ANALYTICS_URL);
 
-// Wait for React to mount — the dashboard root div should appear
-await page.waitForSelector('.jetpack-premium-analytics-dashboard', { timeout: 15000 })
-  .catch(() => { throw new Error('Dashboard root not found — React may not have mounted'); });
+  // Wait for React to mount — the dashboard root div should appear
+  await page.waitForSelector('.jetpack-premium-analytics-dashboard', { timeout: 15000 })
+    .catch(() => { throw new Error('Dashboard root not found — React may not have mounted'); });
 
-// Assert the dashboard heading rendered
-const heading = await page.$eval(
-  '.jetpack-premium-analytics-dashboard h1',
-  el => el.textContent.trim()
-).catch(() => { throw new Error('Dashboard h1 not found — React may not have rendered'); });
-if (heading !== 'Analytics') {
-  throw new Error(`Unexpected dashboard heading: "${heading}"`);
-}
+  // Assert the dashboard heading rendered
+  const heading = await page.$eval(
+    '.jetpack-premium-analytics-dashboard h1',
+    el => el.textContent.trim()
+  ).catch(() => { throw new Error('Dashboard h1 not found — React may not have rendered'); });
+  if (heading !== 'Analytics') {
+    throw new Error(`Unexpected dashboard heading: "${heading}"`);
+  }
 
-// Screenshot for the PR
-await page.screenshot({ path: '/tmp/pa-verify/analytics-dashboard.png', fullPage: false });
+  // Screenshot for the PR
+  await page.screenshot({ path: '/tmp/pa-verify/analytics-dashboard.png', fullPage: false });
 
-await browser.close();
+  await browser.close();
 
-if (errors.length) {
-  console.error('Console errors detected:\n' + errors.join('\n'));
-  process.exit(1);
-}
+  if (errors.length) {
+    console.error('Console errors detected:\n' + errors.join('\n'));
+    process.exit(1);
+  }
 
-console.log('✓ Analytics dashboard mounted without errors');
-console.log('Screenshot saved to /tmp/pa-verify/analytics-dashboard.png');
+  console.log('✓ Analytics dashboard mounted without errors');
+  console.log('Screenshot saved to /tmp/pa-verify/analytics-dashboard.png');
+})();
 EOF
 
 NODE_PATH=$(npm root -g) node /tmp/pa-verify/check.cjs
