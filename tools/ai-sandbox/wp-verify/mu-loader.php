@@ -8,6 +8,7 @@
  * @package automattic/jetpack-premium-analytics
  */
 
+// @phan-suppress-next-line PhanUndeclaredConstant -- WP_CONTENT_DIR is defined by WordPress at runtime.
 $entry = WP_CONTENT_DIR . '/plugins/premium-analytics/src/class-analytics.php';
 if ( ! file_exists( $entry ) ) {
 	// Log the full path server-side only; don't expose filesystem layout in the browser.
@@ -21,6 +22,7 @@ add_action(
 	'plugins_loaded',
 	function () {
 		if ( class_exists( 'Automattic\\Jetpack\\PremiumAnalytics\\Analytics' ) ) {
+			// @phan-suppress-next-line PhanUndeclaredClassMethod -- class existence verified by class_exists() above.
 			\Automattic\Jetpack\PremiumAnalytics\Analytics::init();
 		}
 	},
