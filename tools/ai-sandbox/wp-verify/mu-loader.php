@@ -8,6 +8,8 @@
  * @package automattic/jetpack-premium-analytics
  */
 
+defined( 'ABSPATH' ) || exit; // Prevent direct web access.
+
 // @phan-suppress-next-line PhanUndeclaredConstant -- WP_CONTENT_DIR is defined by WordPress at runtime.
 $entry = WP_CONTENT_DIR . '/plugins/premium-analytics/src/class-analytics.php';
 if ( ! file_exists( $entry ) ) {

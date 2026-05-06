@@ -1,4 +1,4 @@
 Significance: patch
 Type: changed
 
-Update AGENTS.md Definition of Done to require wp-admin UI verification via the new wp-verify Playwright skill.
+Add automated wp-admin UI verification to the premium-analytics agent workflow using a Playwright-driven wp-verify environment.

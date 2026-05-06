@@ -86,8 +86,9 @@ services:
             --admin_password=password
             --admin_email=admin@test.local
             --allow-root || exit 1 ;
-        wp plugin is-installed gutenberg --allow-root 2>/dev/null ||
-          wp plugin install gutenberg --version=19.5.0 --activate --allow-root || exit 1 ;
+        wp plugin is-active gutenberg --allow-root 2>/dev/null ||
+          { wp plugin install gutenberg --version=19.5.0 --allow-root || exit 1 ;
+            wp plugin activate gutenberg --allow-root || exit 1 ; } ;
         sleep infinity
       "
 

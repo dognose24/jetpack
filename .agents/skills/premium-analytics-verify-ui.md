@@ -64,19 +64,21 @@ done
 echo "WordPress is up."
 ```
 
-## Step 2 — Install WordPress (idempotent)
+## Step 2 — Wait for wpcli setup to complete
+
+The `wpcli` container runs `wp core install` and `wp plugin activate gutenberg` on startup.
+Wait for it to finish before proceeding (the container reaches `sleep infinity` only after
+successful setup):
 
 ```bash
-docker compose $COMPOSE_ARGS exec -T wpcli \
-  wp core is-installed --allow-root 2>/dev/null || \
-docker compose $COMPOSE_ARGS exec -T wpcli \
-  wp core install \
-    --url=http://wordpress \
-    --title="Analytics Test" \
-    --admin_user=admin \
-    --admin_password=password \
-    --admin_email=admin@test.local \
-    --allow-root
+echo "Waiting for wpcli setup to complete..."
+TRIES=0
+until docker compose $COMPOSE_ARGS exec -T wpcli wp core is-installed --allow-root 2>/dev/null; do
+  TRIES=$((TRIES + 1))
+  [ $TRIES -gt 20 ] && echo "wpcli setup did not complete in time" && exit 1
+  sleep 5
+done
+echo "wpcli setup complete."
 ```
 
 ## Step 3 — Run Playwright verification
