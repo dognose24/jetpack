@@ -1,4 +1,3 @@
 Significance: patch
 Type: changed
-
-Add automated wp-admin UI verification to the premium-analytics agent workflow using a Playwright-driven wp-verify environment.
+Comment: Internal tooling only — added Playwright UI-verification step to AGENTS.md Definition of Done; no user-facing package change.
