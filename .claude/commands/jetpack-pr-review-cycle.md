@@ -42,9 +42,8 @@ You are authorized to: push commits, comment on the PR, add/remove `[Status] *` 
 ## Round 1 — kickoff
 Right after `gh pr create` succeeds:
 ```bash
-gh pr edit <PR> --add-reviewer Copilot 2>/dev/null \
-  || gh pr edit <PR> --add-reviewer copilot-pull-request-reviewer[bot] 2>/dev/null \
-  || gh pr edit <PR> --add-reviewer github-copilot[bot] 2>/dev/null \
+gh api -X POST "repos/$REPO/pulls/<PR>/requested_reviewers" \
+  -F copilot_review_requested=true 2>/dev/null \
   || echo "Copilot reviewer add rejected — continuing with @claude only"
 gh pr comment <PR> --body "@claude please review this PR."
 sleep 600
@@ -137,9 +136,8 @@ git push
 ### g. Re-request review
 ```bash
 gh pr edit <PR> --remove-label "[Status] Needs Author Reply" 2>/dev/null || true
-gh pr edit <PR> --add-reviewer Copilot 2>/dev/null \
-  || gh pr edit <PR> --add-reviewer "copilot-pull-request-reviewer[bot]" 2>/dev/null \
-  || gh pr edit <PR> --add-reviewer "github-copilot[bot]" 2>/dev/null \
+gh api -X POST "repos/$REPO/pulls/<PR>/requested_reviewers" \
+  -F copilot_review_requested=true 2>/dev/null \
   || echo "Copilot re-review request skipped"
 gh pr comment <PR> --body "@claude please re-review."
 ```

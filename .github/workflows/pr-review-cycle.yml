@@ -224,6 +224,7 @@ jobs:
             "Bash(gh api *)"
             "Bash(gh run *)"
             "Bash(gh auth status)"
+            "Bash(curl *)"
             "Bash(tail *)"
             "Bash(pnpm build *)"
             "Bash(pnpm lint *)"
