@@ -11,10 +11,12 @@ services:
     tty: true
 
   # ── wp-verify services ──────────────────────────────────────────────────────
-  # Start with: docker compose --profile wp-verify up -d
-  # Stop with:  docker compose --profile wp-verify down
+  # Start with: tools/ai-sandbox/wp-verify.sh up
+  # Stop with:  tools/ai-sandbox/wp-verify.sh down
   # The agent controls these via the Docker socket mounted into jetpack-ai by
   # docker-compose.wp-verify.yml (the socket is NOT mounted in this base file).
+  # JETPACK_HOST_PATH bind mounts are also defined there, so this base file
+  # works without any environment variables.
 
   mysql:
     image: mysql:8.0
@@ -46,11 +48,6 @@ services:
       WORDPRESS_DB_PASSWORD: wordpress
       WORDPRESS_DB_NAME: wordpress
     volumes:
-      # JETPACK_HOST_PATH must be set to the jetpack root on the HOST filesystem.
-      # When running docker compose from inside the sandbox the Docker daemon resolves
-      # paths on the host, not the sandbox — set automatically by the wp-verify skill.
-      - ${JETPACK_HOST_PATH:?JETPACK_HOST_PATH not set — see .agents/skills/premium-analytics-verify-ui.md}/projects/packages/premium-analytics:/var/www/html/wp-content/plugins/premium-analytics:ro
-      - ${JETPACK_HOST_PATH:?JETPACK_HOST_PATH not set — see .agents/skills/premium-analytics-verify-ui.md}/tools/ai-sandbox/wp-verify/mu-loader.php:/var/www/html/wp-content/mu-plugins/00-premium-analytics.php:ro
       - wp_html:/var/www/html
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost/wp-login.php"]
