@@ -37,7 +37,11 @@ case "${1:-up}" in
   up)
     echo "JETPACK_HOST_PATH=$JETPACK_HOST_PATH"
     "${COMPOSE[@]}" --profile wp-verify up -d mysql wordpress wpcli jetpack-ai
-    echo "WordPress stack started. Run verification with: /premium-analytics-verify-ui"
+    echo "WordPress stack started."
+    echo "Wait for wpcli setup, then run:"
+    echo "  docker logs -f jetpack-ai-wpcli   # ready when you see: sleep infinity"
+    echo "  docker exec -it jetpack-ai-sandbox bash"
+    echo "  NODE_PATH=\$(npm root -g) node tools/ai-sandbox/wp-verify/check.cjs"
     ;;
   down)
     "${COMPOSE[@]}" --profile wp-verify down
