@@ -36,7 +36,7 @@ services:
       retries: 20
 
   wordpress:
-    image: wordpress:6.7-php8.4-apache
+    image: wordpress:6.8-php8.4-apache
     container_name: jetpack-ai-wordpress
     profiles: ["wp-verify"]
     depends_on:
@@ -75,7 +75,7 @@ services:
     command: |
       sh -c "
         wp core is-installed 2>/dev/null || wp core install --url=http://wordpress --title='Analytics Test' --admin_user=admin --admin_password=password --admin_email=admin@test.local || exit 1
-        wp plugin is-active gutenberg 2>/dev/null || { wp plugin install gutenberg --version=19.5.0 && wp plugin activate gutenberg; } || exit 1
+        wp plugin is-active gutenberg 2>/dev/null || { wp plugin install gutenberg && wp plugin activate gutenberg; } || exit 1
         sleep infinity
       "
 
