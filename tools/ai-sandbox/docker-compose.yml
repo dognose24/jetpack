@@ -71,19 +71,10 @@ services:
       - wp_html:/var/www/html
     # Install WordPress once on startup; subsequent runs are no-ops.
     # Fail fast on install errors so a broken environment surfaces immediately.
-    command: >
+    command: |
       sh -c "
-        wp core is-installed --allow-root 2>/dev/null ||
-          wp core install
-            --url=http://wordpress
-            --title='Analytics Test'
-            --admin_user=admin
-            --admin_password=password
-            --admin_email=admin@test.local
-            --allow-root || exit 1 ;
-        wp plugin is-active gutenberg --allow-root 2>/dev/null ||
-          { wp plugin install gutenberg --version=19.5.0 --allow-root || exit 1 ;
-            wp plugin activate gutenberg --allow-root || exit 1 ; } ;
+        wp core is-installed --allow-root 2>/dev/null || wp core install --url=http://wordpress --title='Analytics Test' --admin_user=admin --admin_password=password --admin_email=admin@test.local --allow-root || exit 1
+        wp plugin is-active gutenberg --allow-root 2>/dev/null || { wp plugin install gutenberg --version=19.5.0 --allow-root && wp plugin activate gutenberg --allow-root; } || exit 1
         sleep infinity
       "
 
