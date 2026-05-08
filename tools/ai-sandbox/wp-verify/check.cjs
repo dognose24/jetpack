@@ -72,18 +72,24 @@ const { chromium } = require( 'playwright' );
 		}
 
 		// Generic health: no SVG inside the dashboard should have zero height after render.
-		// Poll for up to 2 s to allow responsive charts to settle after initial mount
-		// before concluding that a zero-height SVG is a real failure.
+		// Poll for up to 2 s so responsive charts can settle after initial mount.
+		// Only treat the condition as passing once at least one SVG exists and none
+		// are collapsed — exiting when SVG count is 0 would be a false-negative if
+		// charts mount asynchronously after the dashboard root appears.
 		const POLL_INTERVAL = 200;
 		const POLL_TIMEOUT = 2000;
 		let collapsedSvgs = 0;
+		let totalSvgs = 0;
 		const deadline = Date.now() + POLL_TIMEOUT;
 		do {
-			collapsedSvgs = await page.$$eval(
+			( { collapsedSvgs, totalSvgs } = await page.$$eval(
 				'.jetpack-premium-analytics-dashboard svg',
-				els => els.filter( el => el.getBoundingClientRect().height === 0 ).length
-			);
-			if ( collapsedSvgs === 0 ) break;
+				els => ( {
+					collapsedSvgs: els.filter( el => el.getBoundingClientRect().height === 0 ).length,
+					totalSvgs: els.length,
+				} )
+			) );
+			if ( totalSvgs > 0 && collapsedSvgs === 0 ) break;
 			await new Promise( resolve => setTimeout( resolve, POLL_INTERVAL ) );
 		} while ( Date.now() < deadline );
 		if ( collapsedSvgs > 0 ) {
