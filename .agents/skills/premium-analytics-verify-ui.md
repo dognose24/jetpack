@@ -92,7 +92,7 @@ On success, copy the screenshot into the repo under a branch-named path and comm
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
 SCREENSHOT_DEST="docs/screenshots/${BRANCH}.png"
 mkdir -p docs/screenshots
-docker cp jetpack-ai-sandbox:/tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
+cp /tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
 git add "$SCREENSHOT_DEST"
 git commit -m "chore: add wp-verify screenshot for ${BRANCH}"
 ```
