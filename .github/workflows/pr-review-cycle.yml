@@ -162,12 +162,21 @@ jobs:
       - name: Request Copilot review
         if: steps.ctx.outputs.skip != 'true' && github.event_name == 'pull_request'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ steps.ctx.outputs.pr }}
         run: |
-          gh pr edit "$PR" --repo "$REPO" --add-reviewer "Copilot" 2>/dev/null || \
+          # Prefer the copilot_review_requested API field — this sets the flag the
+          # review-cycle logic depends on to detect that Copilot review was requested.
+          if gh api -X POST "repos/$REPO/pulls/$PR/requested_reviewers" \
+               -F copilot_review_requested=true --silent; then
+            echo "Copilot review requested via API."
+          else
+            # Fall back to a comment trigger only when the API call is rejected
+            # (e.g. Copilot not enabled for this repo).
+            echo "API request failed — falling back to @copilot review comment."
             gh pr comment "$PR" --repo "$REPO" --body "@copilot review"
+          fi
 
       - name: Run one PR review cycle round
         if: steps.ctx.outputs.skip != 'true' && github.event_name != 'pull_request'
