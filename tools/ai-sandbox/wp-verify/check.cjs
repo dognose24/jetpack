@@ -57,7 +57,29 @@ const { chromium } = require( 'playwright' );
 			throw new Error( 'Uncaught JS exceptions detected:\n' + pageErrors.join( '\n' ) );
 		}
 
+		// Generic health: page must not grow beyond a reasonable height.
+		// An abnormally tall page (>10 000 px) indicates an infinite resize loop.
+		const pageHeight = await page.evaluate( () => document.documentElement.scrollHeight );
+		if ( pageHeight > 10000 ) {
+			throw new Error(
+				`Page height ${ pageHeight }px exceeds limit — possible infinite resize loop`
+			);
+		}
+
+		// Generic health: no SVG inside the dashboard should have zero height after render.
+		// A zero-height SVG indicates a chart container collapsed (blank placeholder).
+		const collapsedSvgs = await page.$$eval(
+			'.jetpack-premium-analytics-dashboard svg',
+			els => els.filter( el => el.getBoundingClientRect().height === 0 ).length
+		);
+		if ( collapsedSvgs > 0 ) {
+			throw new Error(
+				`${ collapsedSvgs } SVG(s) in dashboard have zero height — charts may not have rendered`
+			);
+		}
+
 		console.log( '✓ Analytics dashboard mounted without uncaught JS exceptions' );
+		console.log( `  page height: ${ pageHeight }px` );
 		console.log( `Screenshot saved to ${ SCREENSHOT_PATH }` );
 	} finally {
 		await browser?.close();
