@@ -1,4 +1,6 @@
 import { PieChart, LineChartUnresponsive, BarListChartUnresponsive } from '@automattic/charts';
+// Required: loads chart CSS modules (including svg { display: block } to prevent ResizeObserver height loops).
+import '@automattic/charts/style.css';
 import { __ } from '@wordpress/i18n';
 import type { DataPointPercentage, SeriesData } from '@automattic/charts';
 
