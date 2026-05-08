@@ -87,7 +87,7 @@ Exit 0 = pass. Non-zero = the error message will indicate what failed.
 ## Step 4 — Report result
 
 On success:
-- Log: `UI verification passed — Analytics dashboard mounted`
+- Log: `✓ Analytics dashboard mounted without uncaught JS exceptions`
 - Attach screenshot path to the PR comment if running inside `jetpack-pr-review-cycle`
 
 On failure:

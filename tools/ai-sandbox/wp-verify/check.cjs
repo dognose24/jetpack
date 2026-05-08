@@ -15,15 +15,15 @@ const { chromium } = require( 'playwright' );
 
 	fs.mkdirSync( SCREENSHOT_DIR, { recursive: true } );
 
-	const browser = await chromium.launch( { args: [ '--no-sandbox', '--disable-setuid-sandbox' ] } );
-	const page = await browser.newPage();
-	const pageErrors = [];
-
-	// Only capture JS runtime exceptions — not HTTP-level console.error noise
-	// (e.g. Gutenberg background API calls that 404 in the minimal test environment).
-	page.on( 'pageerror', err => pageErrors.push( err.message ) );
-
+	let browser;
 	try {
+		browser = await chromium.launch( { args: [ '--no-sandbox', '--disable-setuid-sandbox' ] } );
+		const page = await browser.newPage();
+		const pageErrors = [];
+
+		// Only capture JS runtime exceptions — not HTTP-level console.error noise
+		// (e.g. Gutenberg background API calls that 404 in the minimal test environment).
+		page.on( 'pageerror', err => pageErrors.push( err.message ) );
 		// Login
 		await page.goto( `${ WP_BASE }/wp-login.php` );
 		await page.fill( '#user_login', 'admin' );
@@ -60,6 +60,6 @@ const { chromium } = require( 'playwright' );
 		console.log( '✓ Analytics dashboard mounted without uncaught JS exceptions' );
 		console.log( `Screenshot saved to ${ SCREENSHOT_PATH }` );
 	} finally {
-		await browser.close();
+		await browser?.close();
 	}
 } )();
