@@ -57,16 +57,20 @@ Add a section heading and chart below the existing `<h1>`:
 
 ## Why LineChartUnresponsive
 
-`LineChartUnresponsive` accepts explicit `width`/`height` props and skips ResizeObserver,
-avoiding the feedback loop that occurs when a chart measures its parent and the parent
-has no fixed height.
+`LineChartUnresponsive` skips the `withResponsive` HOC, which means it does not use
+`useParentSize` to measure the parent container. This avoids one class of resize loop
+where the chart measures its parent and the parent has no fixed height.
 
-## Why the CSS import is required
+## Why the CSS import is still required
+
+Even without the responsive wrapper, `ChartLayout` (used internally by all chart variants)
+has a `ResizeObserver` that measures the content area height and feeds it back to the chart.
+The `svg { display: block }` rule in `@automattic/charts/style.css` prevents inline SVG
+descender space from causing that internal measurement to drift upward on each cycle.
 
 `@automattic/charts/style.css` must be explicitly imported — the package does not
-auto-inject styles. Without it, `svg { display: block }` is never applied, causing
-inline SVG descender space to trigger a ResizeObserver height loop that grows the
-chart indefinitely.
+auto-inject styles. Without it the rule is never applied and the chart height grows
+indefinitely.
 
 ## Constraints
 

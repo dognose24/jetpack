@@ -94,18 +94,19 @@ SCREENSHOT_DEST="docs/screenshots/${BRANCH}.png"
 mkdir -p docs/screenshots
 cp /tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
 git add "$SCREENSHOT_DEST"
-git commit -m "chore: add wp-verify screenshot for ${BRANCH}"
+git diff --cached --quiet || git commit -m "chore: add wp-verify screenshot for ${BRANCH}"
 ```
 
-The committed screenshot is then referenceable in the PR description:
+The committed screenshot is then referenceable in the PR description using the sanitized
+branch name (slashes replaced with hyphens):
 
 ```markdown
 ## Screenshot
 
-![Analytics dashboard](docs/screenshots/<branch-name>.png)
+![Analytics dashboard](docs/screenshots/BRANCH.png)
 ```
 
-Replace `<branch-name>` with the actual branch name when writing the PR body.
+Replace `BRANCH` with the output of `git rev-parse --abbrev-ref HEAD | tr '/' '-'`.
 
 ## Step 5 — Report result
 
