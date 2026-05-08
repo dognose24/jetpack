@@ -57,7 +57,7 @@ const { chromium } = require( 'playwright' );
 			throw new Error( 'Uncaught JS exceptions detected:\n' + pageErrors.join( '\n' ) );
 		}
 
-		console.log( '✓ Analytics dashboard mounted without errors' );
+		console.log( '✓ Analytics dashboard mounted without uncaught JS exceptions' );
 		console.log( `Screenshot saved to ${ SCREENSHOT_PATH }` );
 	} finally {
 		await browser.close();
