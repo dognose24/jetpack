@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   jetpack-ai:
     build: .
@@ -12,5 +10,76 @@ services:
     stdin_open: true
     tty: true
 
+  # ── wp-verify services ──────────────────────────────────────────────────────
+  # Start with: tools/ai-sandbox/wp-verify.sh up
+  # Stop with:  tools/ai-sandbox/wp-verify.sh down
+  # The agent controls these via the Docker socket mounted into jetpack-ai by
+  # docker-compose.wp-verify.yml (the socket is NOT mounted in this base file).
+  # JETPACK_HOST_PATH bind mounts are also defined there, so this base file
+  # works without any environment variables.
+
+  mysql:
+    image: mysql:8.0
+    container_name: jetpack-ai-mysql
+    profiles: ["wp-verify"]
+    environment:
+      MYSQL_ROOT_PASSWORD: wordpress
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+    volumes:
+      - wp_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "wordpress", "-pwordpress"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  wordpress:
+    image: wordpress:6.8-php8.4-apache
+    container_name: jetpack-ai-wordpress
+    profiles: ["wp-verify"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: mysql
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+    volumes:
+      - wp_html:/var/www/html
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/wp-login.php"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  wpcli:
+    image: wordpress:cli-2.11.0-php8.4
+    container_name: jetpack-ai-wpcli
+    profiles: ["wp-verify"]
+    user: "33:33"
+    depends_on:
+      wordpress:
+        condition: service_healthy
+    environment:
+      WORDPRESS_DB_HOST: mysql
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+    volumes:
+      - wp_html:/var/www/html
+    # Install WordPress once on startup; subsequent runs are no-ops.
+    # Fail fast on install errors so a broken environment surfaces immediately.
+    command: |
+      sh -c "
+        wp core is-installed 2>/dev/null || wp core install --url=http://wordpress --title='Analytics Test' --admin_user=admin --admin_password=password --admin_email=admin@test.local || exit 1
+        wp plugin is-active gutenberg 2>/dev/null || { wp plugin install gutenberg --version=23.1.0 && wp plugin activate gutenberg; } || exit 1
+        sleep infinity
+      "
+
 volumes:
   jetpack_node_modules:
+  wp_mysql_data:
+  wp_html:

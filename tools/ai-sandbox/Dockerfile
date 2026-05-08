@@ -33,6 +33,21 @@ ENV PATH="/usr/local/lib/nodejs/bin:${PATH}"
 
 RUN npm install -g pnpm@10.28.2 @anthropic-ai/claude-code@2.1.118
 
+# Install Docker CLI (for wp-verify: controlling WordPress/MySQL containers via host socket)
+RUN install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc && \
+    chmod a+r /etc/apt/keyrings/docker.asc && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" \
+      > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && apt-get install -y docker-ce-cli docker-compose-plugin && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Playwright + Chromium for UI verification
+# --with-deps lets Playwright manage its own OS dependencies, avoiding a brittle manual apt list.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+RUN npm install -g playwright@1.48.2 \
+    && playwright install --with-deps chromium
+
 # Install Composer 2.9.2
 RUN curl -fsSL https://getcomposer.org/installer -o composer-setup.php && \
     EXPECTED=$(curl -fsSL https://composer.github.io/installer.sig) && \
@@ -43,7 +58,9 @@ RUN curl -fsSL https://getcomposer.org/installer -o composer-setup.php && \
 
 RUN useradd -ms /bin/bash dev && \
     mkdir -p /home/dev/jetpack/node_modules && \
-    chown -R dev:dev /home/dev/jetpack
+    chown -R dev:dev /home/dev/jetpack && \
+    groupadd -f docker && \
+    usermod -aG docker dev
 
 COPY entrypoint.sh /entrypoint.sh
 
