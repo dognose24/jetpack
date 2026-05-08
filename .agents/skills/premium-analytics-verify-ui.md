@@ -89,7 +89,7 @@ Exit 0 = pass. Non-zero = the error message will indicate what failed.
 On success, copy the screenshot into the repo under a branch-named path and commit it:
 
 ```bash
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
+BRANCH=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
 SCREENSHOT_DEST="docs/screenshots/${BRANCH}.png"
 mkdir -p docs/screenshots
 cp /tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
