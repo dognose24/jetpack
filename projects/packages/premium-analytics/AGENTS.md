@@ -92,7 +92,7 @@ requires human approval.
 
 **Agent-verifiable (required before push):**
 - [ ] Build succeeds
-- [ ] UI verification passes: run `/premium-analytics-verify-ui` inside `jetpack-ai-sandbox` and confirm the Analytics dashboard mounts without console errors
+- [ ] UI verification passes: run `/premium-analytics-verify-ui` inside `jetpack-ai-sandbox` and confirm the Analytics dashboard mounts without uncaught JS exceptions
 
 **Human-verifiable (PR review):**
 - [ ] Route navigation works

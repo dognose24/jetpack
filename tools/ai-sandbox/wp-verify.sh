@@ -49,7 +49,13 @@ case "${1:-up}" in
     echo "  NODE_PATH=\$(npm root -g) node tools/ai-sandbox/wp-verify/check.cjs"
     ;;
   down)
-    "${COMPOSE[@]}" --profile wp-verify down
+    if [ -f /.dockerenv ]; then
+      # Inside sandbox: only stop WP services; stopping jetpack-ai would kill this session.
+      "${COMPOSE[@]}" --profile wp-verify stop mysql wordpress wpcli
+      "${COMPOSE[@]}" --profile wp-verify rm -f mysql wordpress wpcli
+    else
+      "${COMPOSE[@]}" --profile wp-verify down
+    fi
     ;;
   *)
     echo "Usage: $0 [up|down]" >&2

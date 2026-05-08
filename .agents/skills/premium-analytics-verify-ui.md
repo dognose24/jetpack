@@ -1,8 +1,8 @@
 ---
 description: >
   Start the wp-verify WordPress environment, build premium-analytics, navigate to the
-  Analytics admin page with Playwright, and assert the dashboard root mounts without console
-  errors. Use after any premium-analytics UI change as the agent-verifiable step in the
+  Analytics admin page with Playwright, and assert the dashboard root mounts without uncaught
+  JS exceptions. Use after any premium-analytics UI change as the agent-verifiable step in the
   Definition of Done. Requires the ai-sandbox with Docker socket mount and Playwright/Chromium
   installed.
 allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Write, Read
@@ -102,6 +102,8 @@ Leave WordPress running during the review cycle so subsequent verification round
 ```bash
 bash tools/ai-sandbox/wp-verify.sh down
 ```
+
+Safe to run from inside `jetpack-ai-sandbox` — when in-container the script only stops the WP services (mysql, wordpress, wpcli) and does not touch the sandbox container itself.
 
 ## HARD rules
 
