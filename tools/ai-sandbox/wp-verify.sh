@@ -36,7 +36,12 @@ COMPOSE=(
 case "${1:-up}" in
   up)
     echo "JETPACK_HOST_PATH=$JETPACK_HOST_PATH"
-    "${COMPOSE[@]}" --profile wp-verify up -d mysql wordpress wpcli jetpack-ai
+    if [ -f /.dockerenv ]; then
+      # Inside sandbox: jetpack-ai is already running; only start the WP services.
+      "${COMPOSE[@]}" --profile wp-verify up -d mysql wordpress wpcli
+    else
+      "${COMPOSE[@]}" --profile wp-verify up -d mysql wordpress wpcli jetpack-ai
+    fi
     echo "WordPress stack started."
     echo "Wait for wpcli setup, then run:"
     echo "  docker logs -f jetpack-ai-wpcli   # ready when you see: sleep infinity"

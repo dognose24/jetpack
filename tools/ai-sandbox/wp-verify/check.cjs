@@ -17,46 +17,49 @@ const { chromium } = require( 'playwright' );
 
 	const browser = await chromium.launch( { args: [ '--no-sandbox', '--disable-setuid-sandbox' ] } );
 	const page = await browser.newPage();
-	const errors = [];
+	const pageErrors = [];
 
 	// Only capture JS runtime exceptions — not HTTP-level console.error noise
 	// (e.g. Gutenberg background API calls that 404 in the minimal test environment).
-	page.on( 'pageerror', err => errors.push( err.message ) );
+	page.on( 'pageerror', err => pageErrors.push( err.message ) );
 
-	// Login
-	await page.goto( `${ WP_BASE }/wp-login.php` );
-	await page.fill( '#user_login', 'admin' );
-	await page.fill( '#user_pass', 'password' );
-	await page.click( '#wp-submit' );
-	await page.waitForURL( '**/wp-admin/**' );
+	try {
+		// Login
+		await page.goto( `${ WP_BASE }/wp-login.php` );
+		await page.fill( '#user_login', 'admin' );
+		await page.fill( '#user_pass', 'password' );
+		await page.click( '#wp-submit' );
+		await page.waitForURL( '**/wp-admin/**' );
 
-	// Navigate to Analytics
-	await page.goto( ANALYTICS_URL );
+		// Navigate to Analytics
+		await page.goto( ANALYTICS_URL );
 
-	// Wait for React to mount
-	await page
-		.waitForSelector( '.jetpack-premium-analytics-dashboard', { timeout: 15000 } )
-		.catch( () => {
-			throw new Error( 'Dashboard root not found — React may not have mounted' );
-		} );
+		// Wait for React to mount
+		await page
+			.waitForSelector( '.jetpack-premium-analytics-dashboard', { timeout: 15000 } )
+			.catch( () => {
+				throw new Error( 'Dashboard root not found — React may not have mounted' );
+			} );
 
-	// Assert the dashboard heading rendered
-	const heading = await page
-		.$eval( '.jetpack-premium-analytics-dashboard h1', el => el.textContent.trim() )
-		.catch( () => {
-			throw new Error( 'Dashboard h1 not found — React may not have rendered' );
-		} );
-	if ( heading !== 'Analytics' ) {
-		throw new Error( `Unexpected dashboard heading: "${ heading }"` );
+		// Assert the dashboard heading rendered
+		const heading = await page
+			.$eval( '.jetpack-premium-analytics-dashboard h1', el => el.textContent.trim() )
+			.catch( () => {
+				throw new Error( 'Dashboard h1 not found — React may not have rendered' );
+			} );
+		if ( heading !== 'Analytics' ) {
+			throw new Error( `Unexpected dashboard heading: "${ heading }"` );
+		}
+
+		await page.screenshot( { path: SCREENSHOT_PATH, fullPage: false } );
+
+		if ( pageErrors.length ) {
+			throw new Error( 'Uncaught JS exceptions detected:\n' + pageErrors.join( '\n' ) );
+		}
+
+		console.log( '✓ Analytics dashboard mounted without errors' );
+		console.log( `Screenshot saved to ${ SCREENSHOT_PATH }` );
+	} finally {
+		await browser.close();
 	}
-
-	await page.screenshot( { path: SCREENSHOT_PATH, fullPage: false } );
-	await browser.close();
-
-	if ( errors.length ) {
-		throw new Error( 'Console errors detected:\n' + errors.join( '\n' ) );
-	}
-
-	console.log( '✓ Analytics dashboard mounted without errors' );
-	console.log( `Screenshot saved to ${ SCREENSHOT_PATH }` );
 } )();
