@@ -84,11 +84,34 @@ NODE_PATH=$(npm root -g) node tools/ai-sandbox/wp-verify/check.cjs
 
 Exit 0 = pass. Non-zero = the error message will indicate what failed.
 
-## Step 4 — Report result
+## Step 4 — Commit screenshot
+
+On success, copy the screenshot into the repo under a branch-named path and commit it:
+
+```bash
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+SCREENSHOT_DEST="docs/screenshots/${BRANCH}.png"
+mkdir -p docs/screenshots
+docker cp jetpack-ai-sandbox:/tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
+git add "$SCREENSHOT_DEST"
+git commit -m "chore: add wp-verify screenshot for ${BRANCH}"
+```
+
+The committed screenshot is then referenceable in the PR description:
+
+```markdown
+## Screenshot
+
+![Analytics dashboard](docs/screenshots/<branch-name>.png)
+```
+
+Replace `<branch-name>` with the actual branch name when writing the PR body.
+
+## Step 5 — Report result
 
 On success:
 - Log: `✓ Analytics dashboard mounted without uncaught JS exceptions`
-- Attach screenshot path to the PR comment if running inside `jetpack-pr-review-cycle`
+- The screenshot is committed and visible in the PR description
 
 On failure:
 - Log the full error
