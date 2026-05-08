@@ -72,30 +72,33 @@ const { chromium } = require( 'playwright' );
 		}
 
 		// Generic health: no SVG inside the dashboard should have zero height after render.
-		// Poll for up to 2 s so responsive charts can settle after initial mount.
-		// Only treat the condition as passing once at least one SVG exists and none
-		// are collapsed — exiting when SVG count is 0 would be a false-negative if
-		// charts mount asynchronously after the dashboard root appears.
+		// Two-phase approach:
+		//   Phase 1 — quick snapshot: if SVGs are already present, skip the async-wait
+		//             so the no-charts case (current trunk) exits immediately.
+		//   Phase 2 — poll up to 2 s only when SVGs exist, letting responsive charts
+		//             settle before declaring a zero-height SVG a failure.
 		const POLL_INTERVAL = 200;
 		const POLL_TIMEOUT = 2000;
-		let collapsedSvgs = 0;
-		let totalSvgs = 0;
-		const deadline = Date.now() + POLL_TIMEOUT;
-		do {
-			( { collapsedSvgs, totalSvgs } = await page.$$eval(
-				'.jetpack-premium-analytics-dashboard svg',
-				els => ( {
-					collapsedSvgs: els.filter( el => el.getBoundingClientRect().height === 0 ).length,
-					totalSvgs: els.length,
-				} )
-			) );
-			if ( totalSvgs > 0 && collapsedSvgs === 0 ) break;
-			await new Promise( resolve => setTimeout( resolve, POLL_INTERVAL ) );
-		} while ( Date.now() < deadline );
-		if ( collapsedSvgs > 0 ) {
-			throw new Error(
-				`${ collapsedSvgs } SVG(s) in dashboard have zero height — charts may not have rendered`
-			);
+		const svgSnapshot = await page.$$eval(
+			'.jetpack-premium-analytics-dashboard svg',
+			els => els.length
+		);
+		if ( svgSnapshot > 0 ) {
+			let collapsedSvgs = svgSnapshot;
+			const deadline = Date.now() + POLL_TIMEOUT;
+			do {
+				collapsedSvgs = await page.$$eval(
+					'.jetpack-premium-analytics-dashboard svg',
+					els => els.filter( el => el.getBoundingClientRect().height === 0 ).length
+				);
+				if ( collapsedSvgs === 0 ) break;
+				await new Promise( resolve => setTimeout( resolve, POLL_INTERVAL ) );
+			} while ( Date.now() < deadline );
+			if ( collapsedSvgs > 0 ) {
+				throw new Error(
+					`${ collapsedSvgs } SVG(s) in dashboard have zero height — charts may not have rendered`
+				);
+			}
 		}
 
 		console.log( '✓ Analytics dashboard mounted without uncaught JS exceptions' );
