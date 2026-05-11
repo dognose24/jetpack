@@ -117,7 +117,8 @@ reference remains stable as the branch grows.
 BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null | tr '/' '-')
 [ -z "$BRANCH" ] && { echo "Detached HEAD — run from a named branch"; exit 1; }
 git rm --ignore-unmatch "docs/screenshots/${BRANCH}.png"
-git diff --cached --quiet || git commit -m "chore: remove wp-verify screenshot before merge"
+git diff --cached --quiet -- "docs/screenshots/${BRANCH}.png" || \
+  git commit -m "chore: remove wp-verify screenshot before merge" -- "docs/screenshots/${BRANCH}.png"
 ```
 
 After the removal commit, a squash-merge produces a single commit that reflects the
