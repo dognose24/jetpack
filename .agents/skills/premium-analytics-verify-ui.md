@@ -89,24 +89,24 @@ Exit 0 = pass. Non-zero = the error message will indicate what failed.
 On success, copy the screenshot into the repo under a branch-named path and commit it:
 
 ```bash
-BRANCH=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
+BRANCH_RAW=$(git rev-parse --abbrev-ref HEAD)
+BRANCH=$(echo "$BRANCH_RAW" | tr '/' '-')
 SCREENSHOT_DEST="docs/screenshots/${BRANCH}.png"
 mkdir -p docs/screenshots
 cp /tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
 git add "$SCREENSHOT_DEST"
-git diff --cached -- "$SCREENSHOT_DEST" --quiet || git commit -- "$SCREENSHOT_DEST" -m "chore: add wp-verify screenshot for ${BRANCH}"
+git diff --cached -- "$SCREENSHOT_DEST" --quiet || git commit -m "chore: add wp-verify screenshot for ${BRANCH}" -- "$SCREENSHOT_DEST"
 ```
 
-The committed screenshot is then referenceable in the PR description using the sanitized
-branch name (slashes replaced with hyphens):
+The committed screenshot is referenceable in the PR description via a raw GitHub URL
+(relative paths don't render in PR bodies until after merge):
 
-```markdown
-## Screenshot
-
-![Analytics dashboard](docs/screenshots/BRANCH.png)
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+echo "![Analytics dashboard](https://raw.githubusercontent.com/${REPO}/${BRANCH_RAW}/docs/screenshots/${BRANCH}.png)"
 ```
 
-Replace `BRANCH` with the output of `git rev-parse --abbrev-ref HEAD | tr '/' '-'`.
+Use the output of that command as the image line in the PR description.
 
 ## Step 5 — Report result
 
