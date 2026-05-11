@@ -5,7 +5,7 @@ description: >
   JS exceptions. Use after any premium-analytics UI change as the agent-verifiable step in the
   Definition of Done. Requires the ai-sandbox with Docker socket mount and Playwright/Chromium
   installed.
-allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Write, Read
+allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(cp:*), Bash(tr:*), Bash(sed:*), Bash(grep:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(git remote:*), Bash(git rm:*), Write, Read
 ---
 
 # premium-analytics UI Verification
@@ -84,11 +84,53 @@ NODE_PATH=$(npm root -g) node tools/ai-sandbox/wp-verify/check.cjs
 
 Exit 0 = pass. Non-zero = the error message will indicate what failed.
 
-## Step 4 — Report result
+## Step 4 — Commit screenshot
+
+On success, commit the screenshot and print a Markdown image snippet to embed in the PR description:
+
+```bash
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null | tr '/' '-')
+[ -z "$BRANCH" ] && { echo "Detached HEAD — run from a named branch"; exit 1; }
+SCREENSHOT_DEST="docs/screenshots/${BRANCH}.png"
+mkdir -p docs/screenshots
+test -f /tmp/pa-verify/analytics-dashboard.png || { echo "Screenshot not found — re-run Step 3"; exit 1; }
+cp /tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
+git add "$SCREENSHOT_DEST"
+git diff --cached --quiet -- "$SCREENSHOT_DEST" || \
+  git commit -m "chore: add wp-verify screenshot for ${BRANCH}" -- "$SCREENSHOT_DEST" || exit 1
+git remote | grep -q '^fork$' && REMOTE=fork || REMOTE=origin
+REPO=$(git remote get-url "$REMOTE" \
+  | sed 's/.*github\.com[:/]\(.*\)\.git$/\1/' \
+  | sed 's/.*github\.com[:/]\(.*\)$/\1/')
+echo "$REPO" | grep -qE '^[^/]+/[^/]+$' || { echo "Could not derive repo slug from remote — check: git remote get-url $REMOTE"; exit 1; }
+COMMIT=$(git rev-parse HEAD)
+echo "![Analytics dashboard](https://raw.githubusercontent.com/${REPO}/${COMMIT}/docs/screenshots/${BRANCH}.png)"
+```
+
+Push the branch before pasting this URL into the PR description — the raw URL resolves
+only after the commit is on the remote. The URL is pinned to the commit SHA so the image
+reference remains stable as the branch grows. If the branch history is later rewritten
+(rebase or force-push), re-run Step 4 and update the PR description link.
+
+**Before merge:** remove the screenshot file so it is absent from the final tree:
+
+```bash
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null | tr '/' '-')
+[ -z "$BRANCH" ] && { echo "Detached HEAD — run from a named branch"; exit 1; }
+git rm --ignore-unmatch "docs/screenshots/${BRANCH}.png"
+git diff --cached --quiet -- "docs/screenshots/${BRANCH}.png" || \
+  git commit -m "chore: remove wp-verify screenshot before merge" -- "docs/screenshots/${BRANCH}.png"
+```
+
+After the removal commit, a squash-merge produces a single commit that reflects the
+final tree — which no longer contains the PNG. The raw URL remains reachable while
+GitHub retains the object, long enough for reviewers.
+
+## Step 5 — Report result
 
 On success:
 - Log: `✓ Analytics dashboard mounted without uncaught JS exceptions`
-- Attach screenshot path to the PR comment if running inside `jetpack-pr-review-cycle`
+- The screenshot is committed and visible in the PR description
 
 On failure:
 - Log the full error

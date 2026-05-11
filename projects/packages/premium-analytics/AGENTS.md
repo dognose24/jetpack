@@ -61,9 +61,9 @@ build/                         generated — never edit manually
 
 The dashboard is being built in two phases:
 
-- **Phase 1** (`tasks/dashboard-more-charts.md`): UI-only, hardcoded mock data.
+- **Phase 1** (`tasks/dashboard-line-chart.md`): UI-only, hardcoded mock data.
   No data fetching is permitted.
-- **Phase 2** (`tasks/dashboard-real-data.md`): Consume `GET /jetpack/v4/stats/blog`
+- **Phase 2** (task not yet written): Consume `GET /jetpack/v4/stats/blog`
   (already registered by `projects/packages/stats/`).
   Route-local `useStats()` hook via `@wordpress/api-fetch` is allowed.
   Do not register new endpoints or shared stores without approval.
