@@ -94,7 +94,7 @@ SCREENSHOT_DEST="docs/screenshots/${BRANCH}.png"
 mkdir -p docs/screenshots
 cp /tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
 git add "$SCREENSHOT_DEST"
-git diff --cached --quiet || git commit -m "chore: add wp-verify screenshot for ${BRANCH}"
+git diff --cached -- "$SCREENSHOT_DEST" --quiet || git commit -- "$SCREENSHOT_DEST" -m "chore: add wp-verify screenshot for ${BRANCH}"
 ```
 
 The committed screenshot is then referenceable in the PR description using the sanitized
