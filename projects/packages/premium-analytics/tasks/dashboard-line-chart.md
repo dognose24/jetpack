@@ -66,8 +66,9 @@ where the chart measures its parent and the parent has no fixed height.
 
 Even without the responsive wrapper, `ChartLayout` (used internally by all chart variants)
 has a `ResizeObserver` that measures the content area height and feeds it back to the chart.
-The `svg { display: block }` rule in `@automattic/charts/style.css` prevents inline SVG
-descender space from causing that internal measurement to drift upward on each cycle.
+`@automattic/charts/style.css` includes a `.chart-layout__content svg { display: block }`
+rule scoped to ChartLayout's content wrapper, which prevents inline SVG descender space
+from causing that internal measurement to drift upward on each cycle.
 
 `@automattic/charts/style.css` must be explicitly imported — the package does not
 auto-inject styles. Without it the rule is never applied and the chart height grows
