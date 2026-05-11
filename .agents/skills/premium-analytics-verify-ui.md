@@ -5,7 +5,7 @@ description: >
   JS exceptions. Use after any premium-analytics UI change as the agent-verifiable step in the
   Definition of Done. Requires the ai-sandbox with Docker socket mount and Playwright/Chromium
   installed.
-allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(cp:*), Bash(tr:*), Bash(sed:*), Bash(grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(git remote:*), Bash(git rm:*), Write, Read
+allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(cp:*), Bash(tr:*), Bash(sed:*), Bash(grep:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(git remote:*), Bash(git rm:*), Write, Read
 ---
 
 # premium-analytics UI Verification
@@ -89,7 +89,8 @@ Exit 0 = pass. Non-zero = the error message will indicate what failed.
 On success, commit the screenshot and print the raw GitHub URL to embed in the PR description:
 
 ```bash
-BRANCH=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null | tr '/' '-')
+[ -z "$BRANCH" ] && { echo "Detached HEAD — run from a named branch"; exit 1; }
 SCREENSHOT_DEST="docs/screenshots/${BRANCH}.png"
 mkdir -p docs/screenshots
 cp /tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
@@ -110,9 +111,10 @@ commit SHA so the image reference remains stable as the branch grows.
 **Before merge:** remove the screenshot file so it is absent from the final tree:
 
 ```bash
-BRANCH=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
-git rm "docs/screenshots/${BRANCH}.png"
-git commit -m "chore: remove wp-verify screenshot before merge"
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null | tr '/' '-')
+[ -z "$BRANCH" ] && { echo "Detached HEAD — run from a named branch"; exit 1; }
+git rm --ignore-unmatch "docs/screenshots/${BRANCH}.png"
+git diff --cached --quiet || git commit -m "chore: remove wp-verify screenshot before merge"
 ```
 
 After the removal commit, a squash-merge produces a single commit that reflects the
