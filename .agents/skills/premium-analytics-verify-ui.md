@@ -5,7 +5,7 @@ description: >
   JS exceptions. Use after any premium-analytics UI change as the agent-verifiable step in the
   Definition of Done. Requires the ai-sandbox with Docker socket mount and Playwright/Chromium
   installed.
-allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Write, Read
+allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(git:*), Write, Read
 ---
 
 # premium-analytics UI Verification
@@ -89,8 +89,8 @@ Exit 0 = pass. Non-zero = the error message will indicate what failed.
 On success, copy the screenshot into the repo under a branch-named path and commit it:
 
 ```bash
-BRANCH_RAW=$(git rev-parse --abbrev-ref HEAD)
-BRANCH=$(echo "$BRANCH_RAW" | tr '/' '-')
+BRANCH=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
+COMMIT=$(git rev-parse HEAD)
 SCREENSHOT_DEST="docs/screenshots/${BRANCH}.png"
 mkdir -p docs/screenshots
 cp /tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
@@ -98,15 +98,20 @@ git add "$SCREENSHOT_DEST"
 git diff --cached -- "$SCREENSHOT_DEST" --quiet || git commit -m "chore: add wp-verify screenshot for ${BRANCH}" -- "$SCREENSHOT_DEST"
 ```
 
-The committed screenshot is referenceable in the PR description via a raw GitHub URL
-(relative paths don't render in PR bodies until after merge):
+The committed screenshot is referenceable in the PR description via a raw GitHub URL.
+Use the commit SHA (not the branch name) to avoid ambiguity with slashes in branch names.
+Derive the repo slug from the git remote to avoid needing `gh`:
 
 ```bash
-REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-echo "![Analytics dashboard](https://raw.githubusercontent.com/${REPO}/${BRANCH_RAW}/docs/screenshots/${BRANCH}.png)"
+REPO=$(git remote get-url origin | sed 's/.*github\.com[:/]\(.*\)\.git$/\1/' | sed 's/.*github\.com[:/]\(.*\)$/\1/')
+COMMIT=$(git rev-parse HEAD)
+echo "![Analytics dashboard](https://raw.githubusercontent.com/${REPO}/${COMMIT}/docs/screenshots/${BRANCH}.png)"
 ```
 
 Use the output of that command as the image line in the PR description.
+
+**Before merge:** squash or drop the screenshot commit so binary artifacts do not
+accumulate in `trunk` history.
 
 ## Step 5 — Report result
 
