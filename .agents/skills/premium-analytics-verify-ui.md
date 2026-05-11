@@ -93,6 +93,7 @@ BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null | tr '/' '-')
 [ -z "$BRANCH" ] && { echo "Detached HEAD — run from a named branch"; exit 1; }
 SCREENSHOT_DEST="docs/screenshots/${BRANCH}.png"
 mkdir -p docs/screenshots
+test -f /tmp/pa-verify/analytics-dashboard.png || { echo "Screenshot not found — re-run Step 3"; exit 1; }
 cp /tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
 git add "$SCREENSHOT_DEST"
 git diff --cached --quiet -- "$SCREENSHOT_DEST" || \
@@ -101,12 +102,14 @@ git remote | grep -q '^fork$' && REMOTE=fork || REMOTE=origin
 REPO=$(git remote get-url "$REMOTE" \
   | sed 's/.*github\.com[:/]\(.*\)\.git$/\1/' \
   | sed 's/.*github\.com[:/]\(.*\)$/\1/')
+echo "$REPO" | grep -qE '^[^/]+/[^/]+$' || { echo "Could not derive repo slug from remote — check: git remote get-url $REMOTE"; exit 1; }
 COMMIT=$(git rev-parse HEAD)
 echo "![Analytics dashboard](https://raw.githubusercontent.com/${REPO}/${COMMIT}/docs/screenshots/${BRANCH}.png)"
 ```
 
-Use the `echo` output as the image line in the PR description. The URL is pinned to the
-commit SHA so the image reference remains stable as the branch grows.
+Push the branch before pasting this URL into the PR description — the raw URL resolves
+only after the commit is on the remote. The URL is pinned to the commit SHA so the image
+reference remains stable as the branch grows.
 
 **Before merge:** remove the screenshot file so it is absent from the final tree:
 
