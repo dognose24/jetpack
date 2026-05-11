@@ -77,7 +77,7 @@ indefinitely.
 
 - Mock data only — do not fetch, do not invent endpoints or stores
 - Do not claim these are real analytics metrics in any UI copy
-- Do not modify anything outside `routes/dashboard/`, `package.json` (root), and the changelog entry — these are the only exceptions listed in Scope above
+- Do not modify anything outside `routes/dashboard/`, `projects/packages/premium-analytics/package.json`, and the changelog entry — these are the only exceptions listed in Scope above
 - Do not edit files in `build/`
 
 ## Definition of done
