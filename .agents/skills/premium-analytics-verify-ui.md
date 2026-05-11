@@ -5,7 +5,7 @@ description: >
   JS exceptions. Use after any premium-analytics UI change as the agent-verifiable step in the
   Definition of Done. Requires the ai-sandbox with Docker socket mount and Playwright/Chromium
   installed.
-allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(cp:*), Bash(tr:*), Bash(sed:*), Bash(grep:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(git remote:*), Bash(git rm:*), Write, Read
+allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(cp:*), Bash(tr:*), Bash(sed:*), Bash(grep:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(git remote:*), Bash(git rm:*), Write, Read
 ---
 
 # premium-analytics UI Verification
@@ -86,7 +86,7 @@ Exit 0 = pass. Non-zero = the error message will indicate what failed.
 
 ## Step 4 — Commit screenshot
 
-On success, commit the screenshot and print the raw GitHub URL to embed in the PR description:
+On success, commit the screenshot and print a Markdown image snippet to embed in the PR description:
 
 ```bash
 BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null | tr '/' '-')
@@ -97,7 +97,7 @@ test -f /tmp/pa-verify/analytics-dashboard.png || { echo "Screenshot not found �
 cp /tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
 git add "$SCREENSHOT_DEST"
 git diff --cached --quiet -- "$SCREENSHOT_DEST" || \
-  git commit -m "chore: add wp-verify screenshot for ${BRANCH}" -- "$SCREENSHOT_DEST"
+  git commit -m "chore: add wp-verify screenshot for ${BRANCH}" -- "$SCREENSHOT_DEST" || exit 1
 git remote | grep -q '^fork$' && REMOTE=fork || REMOTE=origin
 REPO=$(git remote get-url "$REMOTE" \
   | sed 's/.*github\.com[:/]\(.*\)\.git$/\1/' \
@@ -109,7 +109,8 @@ echo "![Analytics dashboard](https://raw.githubusercontent.com/${REPO}/${COMMIT}
 
 Push the branch before pasting this URL into the PR description — the raw URL resolves
 only after the commit is on the remote. The URL is pinned to the commit SHA so the image
-reference remains stable as the branch grows.
+reference remains stable as the branch grows. If the branch history is later rewritten
+(rebase or force-push), re-run Step 4 and update the PR description link.
 
 **Before merge:** remove the screenshot file so it is absent from the final tree:
 
