@@ -12,8 +12,9 @@ You may only touch:
 - `routes/dashboard/stage.tsx`
 - `routes/dashboard/package.json` (only if a dependency needs to be added)
 - `package.json` at the package root (only if a dependency needs to be added)
+- `changelog/` (one entry added via `pnpm jetpack changelogger add`)
 
-Do not create new routes, new packages, or new files outside this directory.
+Do not create new routes, new packages, or new files outside these locations.
 
 ## Implementation
 

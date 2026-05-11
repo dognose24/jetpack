@@ -5,7 +5,7 @@ description: >
   JS exceptions. Use after any premium-analytics UI change as the agent-verifiable step in the
   Definition of Done. Requires the ai-sandbox with Docker socket mount and Playwright/Chromium
   installed.
-allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(git rev-parse *), Bash(git rev-list *), Bash(git add *), Bash(git diff *), Bash(git commit *), Bash(git remote *), Write, Read
+allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(cp:*), Bash(tr:*), Bash(sed:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(git remote:*), Write, Read
 ---
 
 # premium-analytics UI Verification
@@ -111,7 +111,9 @@ echo "![Analytics dashboard](https://raw.githubusercontent.com/${REPO}/${COMMIT}
 Use the output of that command as the image line in the PR description.
 
 **Before merge:** squash or drop the screenshot commit so binary artifacts do not
-accumulate in `trunk` history.
+accumulate in `trunk` history. The raw URL in the PR description only needs to be
+reachable while the PR is open — once merged and closed, the screenshot has already
+served its purpose for reviewers.
 
 ## Step 5 — Report result
 
