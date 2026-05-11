@@ -5,7 +5,7 @@ description: >
   JS exceptions. Use after any premium-analytics UI change as the agent-verifiable step in the
   Definition of Done. Requires the ai-sandbox with Docker socket mount and Playwright/Chromium
   installed.
-allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(cp:*), Bash(tr:*), Bash(sed:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(git remote:*), Write, Read
+allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(cp:*), Bash(tr:*), Bash(sed:*), Bash(grep:*), Bash(git rev-parse:*), Bash(git rev-list:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(git remote:*), Bash(git rm:*), Write, Read
 ---
 
 # premium-analytics UI Verification
@@ -96,7 +96,8 @@ cp /tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
 git add "$SCREENSHOT_DEST"
 git diff --cached --quiet -- "$SCREENSHOT_DEST" || \
   git commit -m "chore: add wp-verify screenshot for ${BRANCH}" -- "$SCREENSHOT_DEST"
-REPO=$(git remote get-url origin \
+git remote | grep -q '^fork$' && REMOTE=fork || REMOTE=origin
+REPO=$(git remote get-url "$REMOTE" \
   | sed 's/.*github\.com[:/]\(.*\)\.git$/\1/' \
   | sed 's/.*github\.com[:/]\(.*\)$/\1/')
 COMMIT=$(git rev-parse HEAD)
@@ -104,11 +105,19 @@ echo "![Analytics dashboard](https://raw.githubusercontent.com/${REPO}/${COMMIT}
 ```
 
 Use the `echo` output as the image line in the PR description. The URL is pinned to the
-commit SHA so slashes in the branch name do not break it.
+commit SHA so the image reference remains stable as the branch grows.
 
-**Before merge:** squash or drop the screenshot commit so binary artifacts do not
-accumulate in `trunk` history. The raw URL only needs to be reachable while the PR is
-open — once merged and closed, the screenshot has already served its purpose for reviewers.
+**Before merge:** remove the screenshot file so it does not land in `trunk` — squashing
+is not sufficient because it folds the PNG into the squashed commit:
+
+```bash
+BRANCH=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
+git rm "docs/screenshots/${BRANCH}.png"
+git commit -m "chore: remove wp-verify screenshot before merge"
+```
+
+The raw URL is pinned to a commit SHA and remains reachable while GitHub retains the
+object — long enough for reviewers, even after the file is removed from the branch.
 
 ## Step 5 — Report result
 
