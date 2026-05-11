@@ -86,7 +86,7 @@ Exit 0 = pass. Non-zero = the error message will indicate what failed.
 
 ## Step 4 — Commit screenshot
 
-On success, copy the screenshot into the repo under a branch-named path and commit it:
+On success, commit the screenshot and print the raw GitHub URL to embed in the PR description:
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
@@ -94,26 +94,21 @@ SCREENSHOT_DEST="docs/screenshots/${BRANCH}.png"
 mkdir -p docs/screenshots
 cp /tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
 git add "$SCREENSHOT_DEST"
-git diff --cached --quiet -- "$SCREENSHOT_DEST" || git commit -m "chore: add wp-verify screenshot for ${BRANCH}" -- "$SCREENSHOT_DEST"
-```
-
-The committed screenshot is referenceable in the PR description via a raw GitHub URL.
-Use the commit SHA (not the branch name) to avoid ambiguity with slashes in branch names.
-Derive the repo slug from the git remote to avoid needing `gh`:
-
-```bash
-BRANCH=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
-REPO=$(git remote get-url origin | sed 's/.*github\.com[:/]\(.*\)\.git$/\1/' | sed 's/.*github\.com[:/]\(.*\)$/\1/')
+git diff --cached --quiet -- "$SCREENSHOT_DEST" || \
+  git commit -m "chore: add wp-verify screenshot for ${BRANCH}" -- "$SCREENSHOT_DEST"
+REPO=$(git remote get-url origin \
+  | sed 's/.*github\.com[:/]\(.*\)\.git$/\1/' \
+  | sed 's/.*github\.com[:/]\(.*\)$/\1/')
 COMMIT=$(git rev-parse HEAD)
 echo "![Analytics dashboard](https://raw.githubusercontent.com/${REPO}/${COMMIT}/docs/screenshots/${BRANCH}.png)"
 ```
 
-Use the output of that command as the image line in the PR description.
+Use the `echo` output as the image line in the PR description. The URL is pinned to the
+commit SHA so slashes in the branch name do not break it.
 
 **Before merge:** squash or drop the screenshot commit so binary artifacts do not
-accumulate in `trunk` history. The raw URL in the PR description only needs to be
-reachable while the PR is open — once merged and closed, the screenshot has already
-served its purpose for reviewers.
+accumulate in `trunk` history. The raw URL only needs to be reachable while the PR is
+open — once merged and closed, the screenshot has already served its purpose for reviewers.
 
 ## Step 5 — Report result
 
