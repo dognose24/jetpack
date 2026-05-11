@@ -5,7 +5,7 @@ description: >
   JS exceptions. Use after any premium-analytics UI change as the agent-verifiable step in the
   Definition of Done. Requires the ai-sandbox with Docker socket mount and Playwright/Chromium
   installed.
-allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(git:*), Write, Read
+allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(git rev-parse *), Bash(git rev-list *), Bash(git add *), Bash(git diff *), Bash(git commit *), Bash(git remote *), Write, Read
 ---
 
 # premium-analytics UI Verification
@@ -90,12 +90,11 @@ On success, copy the screenshot into the repo under a branch-named path and comm
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
-COMMIT=$(git rev-parse HEAD)
 SCREENSHOT_DEST="docs/screenshots/${BRANCH}.png"
 mkdir -p docs/screenshots
 cp /tmp/pa-verify/analytics-dashboard.png "$SCREENSHOT_DEST"
 git add "$SCREENSHOT_DEST"
-git diff --cached -- "$SCREENSHOT_DEST" --quiet || git commit -m "chore: add wp-verify screenshot for ${BRANCH}" -- "$SCREENSHOT_DEST"
+git diff --cached --quiet -- "$SCREENSHOT_DEST" || git commit -m "chore: add wp-verify screenshot for ${BRANCH}" -- "$SCREENSHOT_DEST"
 ```
 
 The committed screenshot is referenceable in the PR description via a raw GitHub URL.
@@ -103,6 +102,7 @@ Use the commit SHA (not the branch name) to avoid ambiguity with slashes in bran
 Derive the repo slug from the git remote to avoid needing `gh`:
 
 ```bash
+BRANCH=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
 REPO=$(git remote get-url origin | sed 's/.*github\.com[:/]\(.*\)\.git$/\1/' | sed 's/.*github\.com[:/]\(.*\)$/\1/')
 COMMIT=$(git rev-parse HEAD)
 echo "![Analytics dashboard](https://raw.githubusercontent.com/${REPO}/${COMMIT}/docs/screenshots/${BRANCH}.png)"
