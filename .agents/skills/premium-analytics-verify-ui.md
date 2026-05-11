@@ -107,8 +107,7 @@ echo "![Analytics dashboard](https://raw.githubusercontent.com/${REPO}/${COMMIT}
 Use the `echo` output as the image line in the PR description. The URL is pinned to the
 commit SHA so the image reference remains stable as the branch grows.
 
-**Before merge:** remove the screenshot file so it does not land in `trunk` — squashing
-is not sufficient because it folds the PNG into the squashed commit:
+**Before merge:** remove the screenshot file so it is absent from the final tree:
 
 ```bash
 BRANCH=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
@@ -116,8 +115,9 @@ git rm "docs/screenshots/${BRANCH}.png"
 git commit -m "chore: remove wp-verify screenshot before merge"
 ```
 
-The raw URL is pinned to a commit SHA and remains reachable while GitHub retains the
-object — long enough for reviewers, even after the file is removed from the branch.
+After the removal commit, a squash-merge produces a single commit that reflects the
+final tree — which no longer contains the PNG. The raw URL remains reachable while
+GitHub retains the object, long enough for reviewers.
 
 ## Step 5 — Report result
 
