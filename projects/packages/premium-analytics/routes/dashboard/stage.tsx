@@ -1,7 +1,6 @@
-import { LineChartUnresponsive } from '@automattic/charts';
+import { LineChartUnresponsive, type SeriesData } from '@automattic/charts';
 import '@automattic/charts/style.css';
 import { __ } from '@wordpress/i18n';
-import type { SeriesData } from '@automattic/charts';
 
 const PAGE_VIEWS: SeriesData[] = [
 	{
