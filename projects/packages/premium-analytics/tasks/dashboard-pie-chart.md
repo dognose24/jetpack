@@ -6,18 +6,16 @@ Add a pie chart to the dashboard route to display the breakdown of visitors by d
 type, using mock data. This is a UI-only change — no data fetching, no endpoints, no
 stores.
 
-## Prerequisite
-
-This task assumes `dashboard-line-chart` is already merged into `fork/trunk`. The line
-chart's CSS import (`@automattic/charts/style.css`) and the existing chart `<h2>` /
-`<LineChartUnresponsive>` block are reused as-is. Do not remove or rewrite them.
+The starting point is the clean `fork/trunk` dashboard: an `<h1>Analytics</h1>` heading
+and a welcome paragraph, no charts. After this task the dashboard will also contain a
+device-types pie chart rendered with `PieChartUnresponsive` from `@automattic/charts`.
 
 ## Scope
 
 You may only touch:
 
 - `routes/dashboard/stage.tsx`
-- `routes/dashboard/package.json` (only if a dependency needs to be added)
+- `routes/dashboard/package.json` — add `@automattic/charts` as a dependency
 - `projects/packages/premium-analytics/package.json` (only if a dependency needs to be added)
 - `changelog/` (one entry added via `pnpm jetpack changelogger add`)
 
@@ -25,32 +23,33 @@ Do not create new routes, new packages, or new files outside these locations.
 
 ## Implementation
 
-Extend the existing imports from `@automattic/charts` to add `PieChartUnresponsive` and
-the `DataPointPercentage` type. The exact shape of the existing imports depends on what
-`dashboard-line-chart` merged with — at the time of writing, the line-chart task spec
-shows separate value/type imports but the merged implementation combines them into one
-statement. Match whichever shape is in the file when you start; if you find separate
-value and type imports, combine them as you add the new symbols (this is in scope and
-consistent with the merged line-chart state).
+### Add the dependency
 
-The `@automattic/charts/style.css` import path must remain unchanged. The
-`eslint-disable-next-line import/no-unresolved` comment above it suppresses a false
-positive: `@automattic/charts/style.css` is a subpath export that resolves to
-`dist/index.css`, but `dist/` is gitignored and the ESLint CI step does not run the
-charts package build, so the resolver cannot find the file at lint time. Leave the
-comment in place; do not edit its text or remove it.
+In `routes/dashboard/package.json`, add `@automattic/charts` to `dependencies`. Use the
+workspace protocol so the bundler picks up the in-repo build:
 
-Final import block (combined-import shape):
+```json
+{
+	"dependencies": {
+		"@automattic/charts": "workspace:*",
+		"@wordpress/i18n": "^6.9.0"
+	}
+}
+```
+
+### Imports
+
+Add a value import for `PieChartUnresponsive` and a type import for `DataPointPercentage`
+from `@automattic/charts`, plus the chart CSS subpath. The `eslint-disable-next-line`
+comment is required — see "Why the CSS import" below.
 
 ```ts
 import {
-	LineChartUnresponsive,
 	PieChartUnresponsive,
-	type SeriesData,
 	type DataPointPercentage,
 } from '@automattic/charts';
 // eslint-disable-next-line import/no-unresolved -- CSS subpath export; dist/index.css is gitignored and not built in the ESLint CI step
-import '@automattic/charts/style.css'; // already present from line chart — keep, do not re-add
+import '@automattic/charts/style.css';
 import { __ } from '@wordpress/i18n';
 ```
 
@@ -59,7 +58,7 @@ import { __ } from '@wordpress/i18n';
 `PieChartUnresponsive` uses `DataPointPercentage` items — each needs only `label` and
 `value`. Percentages are calculated automatically from the values.
 
-Add the constant alongside `PAGE_VIEWS`:
+Add the constant above the `stage` export:
 
 ```ts
 const DEVICE_TYPES: DataPointPercentage[] = [
@@ -74,24 +73,48 @@ predictable rotation.
 
 ### Rendering
 
-Add a section heading and chart **below** the existing Page Views block — do not move,
-wrap, or restyle the line chart:
+Add a section heading and the chart **below** the existing welcome paragraph, inside the
+existing `.jetpack-premium-analytics-dashboard` wrapper:
 
 ```tsx
 <h2>{ __( 'Device Types', 'jetpack-premium-analytics' ) }</h2>
 <PieChartUnresponsive data={ DEVICE_TYPES } width={ 360 } height={ 360 } />
 ```
 
+The final `stage.tsx` body should read:
+
+```tsx
+<div className="jetpack-premium-analytics-dashboard">
+	<h1>{ __( 'Analytics', 'jetpack-premium-analytics' ) }</h1>
+	<p>{ __( 'Welcome to the Analytics dashboard.', 'jetpack-premium-analytics' ) }</p>
+	<h2>{ __( 'Device Types', 'jetpack-premium-analytics' ) }</h2>
+	<PieChartUnresponsive data={ DEVICE_TYPES } width={ 360 } height={ 360 } />
+</div>
+```
+
 ## Why PieChartUnresponsive
 
-Same reason as the line chart: `PieChartUnresponsive` skips the `withResponsive` HOC,
-which means it does not use `useParentSize` to measure the parent container. This avoids
-one class of resize loop where the chart measures its parent and the parent has no fixed
-height.
+`PieChartUnresponsive` skips the `withResponsive` HOC, which means it does not use
+`useParentSize` to measure the parent container. This avoids one class of resize loop
+where the chart measures its parent and the parent has no fixed height.
 
-`ChartLayout`'s internal `ResizeObserver` still applies, so the chart CSS import
-(`@automattic/charts/style.css`) is still required — but it is already in the file from
-the line chart task, so no new import is needed here.
+## Why the CSS import is required
+
+Even without the responsive wrapper, `ChartLayout` (used internally by all chart variants)
+has a `ResizeObserver` that measures the content area height and feeds it back to the
+chart. `@automattic/charts/style.css` includes a `.chart-layout__content svg { display:
+block }` rule scoped to ChartLayout's content wrapper, which prevents inline SVG
+descender space from causing that internal measurement to drift upward on each cycle.
+
+`@automattic/charts/style.css` must be explicitly imported — the package does not
+auto-inject styles. Without it the rule is never applied and the chart height grows
+indefinitely.
+
+The `eslint-disable-next-line import/no-unresolved` comment is required because
+`@automattic/charts/style.css` is a subpath export that resolves to `dist/index.css`,
+which is gitignored and the ESLint CI step does not run the charts package build, so the
+resolver cannot find the file at lint time. Leave the comment in place; do not edit its
+text or remove it.
 
 ## Constraints
 
@@ -99,7 +122,7 @@ the line chart task, so no new import is needed here.
 - Do not claim these are real device-breakdown metrics in any UI copy
 - Do not modify anything outside `routes/dashboard/`, `routes/dashboard/package.json`, `projects/packages/premium-analytics/package.json`, and the changelog entry — these are the only exceptions listed in Scope above
 - Do not edit files in `build/`
-- Do not change the line chart's mock data, dimensions, or heading
+- Do not change the existing `<h1>` or welcome paragraph
 
 ## Definition of done
 
@@ -108,8 +131,8 @@ the line chart task, so no new import is needed here.
 - [ ] UI verification passes: run `/premium-analytics-verify-ui` inside `jetpack-ai-sandbox`
 
 **Human-verifiable (PR review):**
-- [ ] Pie chart renders in `wp-admin` below the line chart with three labelled segments
-- [ ] Line chart still renders unchanged at its original dimensions
+- [ ] Pie chart renders in `wp-admin` below the welcome paragraph with three labelled segments (Desktop, Mobile, Tablet)
+- [ ] Chart height is stable — no infinite growth
 - [ ] No uncaught JS exceptions in the browser console
 
 ## Submitting
