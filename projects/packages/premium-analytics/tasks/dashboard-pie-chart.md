@@ -25,10 +25,22 @@ Do not create new routes, new packages, or new files outside these locations.
 
 ## Implementation
 
-Extend the existing combined import from `@automattic/charts` to add `PieChartUnresponsive`
-and the `DataPointPercentage` type. Keep the existing CSS import line untouched.
+Extend the existing imports from `@automattic/charts` to add `PieChartUnresponsive` and
+the `DataPointPercentage` type. The exact shape of the existing imports depends on what
+`dashboard-line-chart` merged with — at the time of writing, the line-chart task spec
+shows separate value/type imports but the merged implementation combines them into one
+statement. Match whichever shape is in the file when you start; if you find separate
+value and type imports, combine them as you add the new symbols (this is in scope and
+consistent with the merged line-chart state).
 
-Final import block:
+The `@automattic/charts/style.css` import path must remain unchanged. The
+`eslint-disable-next-line import/no-unresolved` comment above it suppresses a false
+positive: `@automattic/charts/style.css` is a subpath export that resolves to
+`dist/index.css`, but `dist/` is gitignored and the ESLint CI step does not run the
+charts package build, so the resolver cannot find the file at lint time. Leave the
+comment in place; do not edit its text or remove it.
+
+Final import block (combined-import shape):
 
 ```ts
 import {
