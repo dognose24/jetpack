@@ -1,8 +1,9 @@
 import { LineChartUnresponsive } from '@automattic/charts';
-import '@automattic/charts/style.css';
 import { __ } from '@wordpress/i18n';
 import type { SeriesData } from '@automattic/charts';
+import '@automattic/charts/style.css';
 
+// TODO Phase 2: Replace with real data from GET /jetpack/v4/stats/blog
 const PAGE_VIEWS: SeriesData[] = [
 	{
 		label: 'Page Views',
@@ -24,7 +25,9 @@ export const stage = () => {
 			<h1>{ __( 'Analytics', 'jetpack-premium-analytics' ) }</h1>
 			<p>{ __( 'Welcome to the Analytics dashboard.', 'jetpack-premium-analytics' ) }</p>
 			<h2>{ __( 'Page Views', 'jetpack-premium-analytics' ) }</h2>
-			<LineChartUnresponsive data={ PAGE_VIEWS } width={ 600 } height={ 280 } />
+			<div style={ { maxWidth: '100%', overflowX: 'auto' } }>
+				<LineChartUnresponsive data={ PAGE_VIEWS } width={ 600 } height={ 280 } />
+			</div>
 		</div>
 	);
 };
