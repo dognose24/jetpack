@@ -50,7 +50,7 @@ import {
 } from '@automattic/charts';
 // eslint-disable-next-line import/no-unresolved -- CSS subpath export; dist/index.css is gitignored and not built in the ESLint CI step
 import '@automattic/charts/style.css';
-import { __ } from '@wordpress/i18n';
+import { __ } from '@wordpress/i18n'; // already present in stage.tsx — keep, do not re-add
 ```
 
 ### Mock data
