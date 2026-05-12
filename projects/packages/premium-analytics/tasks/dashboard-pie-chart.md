@@ -50,7 +50,7 @@ import {
 	type DataPointPercentage,
 } from '@automattic/charts';
 // eslint-disable-next-line import/no-unresolved -- CSS subpath export; dist/index.css is gitignored and not built in the ESLint CI step
-import '@automattic/charts/style.css';
+import '@automattic/charts/style.css'; // already present from line chart — keep, do not re-add
 import { __ } from '@wordpress/i18n';
 ```
 
@@ -97,7 +97,7 @@ the line chart task, so no new import is needed here.
 
 - Mock data only — do not fetch, do not invent endpoints or stores
 - Do not claim these are real device-breakdown metrics in any UI copy
-- Do not modify anything outside `routes/dashboard/`, `projects/packages/premium-analytics/package.json`, and the changelog entry — these are the only exceptions listed in Scope above
+- Do not modify anything outside `routes/dashboard/`, `routes/dashboard/package.json`, `projects/packages/premium-analytics/package.json`, and the changelog entry — these are the only exceptions listed in Scope above
 - Do not edit files in `build/`
 - Do not change the line chart's mock data, dimensions, or heading
 
