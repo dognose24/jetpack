@@ -29,19 +29,26 @@ import type { SeriesData } from '@automattic/charts';
 
 ### Mock data
 
+`LineChartUnresponsive` uses `DataPointDate` items — each point must have a `date` or
+`dateString` field to be positioned on the x-axis. Using `DataPoint` (`{ label, value }`
+only) will render the axes but not the data line.
+
+Use `dateString` rather than `new Date('YYYY-MM-DD')`: the string constructor parses as
+UTC and can show the previous day in negative-offset timezones; `dateString` is parsed as
+local time by the charts package.
+
 ```ts
 const PAGE_VIEWS: SeriesData[] = [
   {
-    group: 'views',
     label: 'Page Views',
     data: [
-      { label: 'Mon', value: 1200 },
-      { label: 'Tue', value: 1900 },
-      { label: 'Wed', value: 1500 },
-      { label: 'Thu', value: 2200 },
-      { label: 'Fri', value: 1800 },
-      { label: 'Sat', value: 900 },
-      { label: 'Sun', value: 700 },
+      { dateString: '2024-01-01', value: 1200, label: 'Mon' },
+      { dateString: '2024-01-02', value: 1900, label: 'Tue' },
+      { dateString: '2024-01-03', value: 1500, label: 'Wed' },
+      { dateString: '2024-01-04', value: 2200, label: 'Thu' },
+      { dateString: '2024-01-05', value: 1800, label: 'Fri' },
+      { dateString: '2024-01-06', value: 900, label: 'Sat' },
+      { dateString: '2024-01-07', value: 700, label: 'Sun' },
     ],
   },
 ];
