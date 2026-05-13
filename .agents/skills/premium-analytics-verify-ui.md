@@ -145,7 +145,7 @@ GitHub retains the object, long enough for reviewers.
 ## Step 5 — Report result
 
 On success:
-- `playwright test` exits 0 and prints a summary like `3 passed (1 skipped)`
+- `playwright test` exits 0 and prints a summary like `2 passed (2 skipped)` on a chartless dashboard — the zero-height-SVG test skips when no charts are present, and the `pie-chart-tooltip` spec is skipped until that task lands
 - The screenshot is committed and visible in the PR description
 
 On failure:

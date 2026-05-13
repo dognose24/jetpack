@@ -21,6 +21,8 @@ export default defineConfig( {
 	testDir: './tests',
 	fullyParallel: false,
 	workers: 1,
+	// Intentionally 0: this suite is a regression gate, not a flaky-test runner. Silent
+	// retries would mask real intermittent breakage (e.g. resize-loop only on second mount).
 	retries: 0,
 	timeout: 30_000,
 	expect: { timeout: 10_000 },

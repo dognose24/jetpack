@@ -45,7 +45,7 @@ test.describe( 'Premium Analytics dashboard', () => {
 		const height = await page.$eval( DASHBOARD_ROOT, ( el: HTMLElement ) => el.scrollHeight );
 		expect(
 			height,
-			`Dashboard height ${ height }px exceeds ${ MAX_DASHBOARD_HEIGHT_PX }px limit — possible infinite resize loop`
+			`Dashboard height ${ height }px meets or exceeds the ${ MAX_DASHBOARD_HEIGHT_PX }px limit — possible infinite resize loop`
 		).toBeLessThan( MAX_DASHBOARD_HEIGHT_PX );
 	} );
 
