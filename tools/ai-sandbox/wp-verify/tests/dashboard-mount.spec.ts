@@ -22,15 +22,16 @@ test.describe( 'Premium Analytics dashboard', () => {
 		// Wait for React to mount the dashboard root.
 		await page.waitForSelector( DASHBOARD_ROOT, { timeout: 15_000 } );
 
-		// Heading visible and correct.
-		await expect( page.locator( `${ DASHBOARD_ROOT } h1` ) ).toHaveText( 'Analytics' );
-
-		// Save a fresh screenshot regardless of pass/fail so the verify-ui skill
-		// can commit it for the PR description (its Step 4 reads this path).
+		// Save a fresh screenshot before any assertion so the verify-ui skill can
+		// commit it for the PR description (its Step 4 reads this path) — and so
+		// failure states (wrong heading, JS errors) are still captured visually.
 		await page.screenshot( {
 			path: path.join( ARTIFACT_DIR, 'analytics-dashboard.png' ),
 			fullPage: false,
 		} );
+
+		// Heading visible and correct.
+		await expect( page.locator( `${ DASHBOARD_ROOT } h1` ) ).toHaveText( 'Analytics' );
 
 		expect( pageErrors, `Uncaught JS exceptions detected:\n${ pageErrors.join( '\n' ) }` ).toEqual(
 			[]
@@ -41,7 +42,7 @@ test.describe( 'Premium Analytics dashboard', () => {
 		await page.goto( ANALYTICS_URL );
 		await page.waitForSelector( DASHBOARD_ROOT );
 
-		const height = await page.$eval( DASHBOARD_ROOT, ( el: Element ) => el.scrollHeight );
+		const height = await page.$eval( DASHBOARD_ROOT, ( el: HTMLElement ) => el.scrollHeight );
 		expect(
 			height,
 			`Dashboard height ${ height }px exceeds ${ MAX_DASHBOARD_HEIGHT_PX }px limit — possible infinite resize loop`
