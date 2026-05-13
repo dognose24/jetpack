@@ -25,32 +25,43 @@ Do not create new routes, new packages, or new files outside these locations.
 
 ### Add the dependency
 
-In `routes/dashboard/package.json`, add `@automattic/charts` to `dependencies`. Use the
-workspace protocol so the bundler picks up the in-repo build:
+`@automattic/charts` must be declared in **two** package.json files. The pnpm workspace
+globs (`projects/*/*`) only register top-level package directories, so the
+`projects/packages/premium-analytics` entry is what makes the workspace resolution
+succeed. The route-local entry exists for bundler/dependency-graph metadata. Both are
+needed — omitting either has produced module-resolution or build failures in prior
+runs.
 
-```json
-{
-	"dependencies": {
-		"@automattic/charts": "workspace:*",
-		"@wordpress/i18n": "^6.9.0"
-	}
-}
-```
+Add `@automattic/charts` to the existing `dependencies` block in each file (do not
+remove any other fields):
+
+1. `projects/packages/premium-analytics/package.json` — add only this line under
+   `dependencies` (keep `@wordpress/boot`, `@wordpress/data`, `@wordpress/i18n`,
+   `@wordpress/icons`, `@wordpress/route`, `react`, `react-dom`, etc. unchanged):
+   ```jsonc
+   "@automattic/charts": "workspace:*",
+   ```
+
+2. `routes/dashboard/package.json` — add only this line under `dependencies` (keep
+   `private`, `name`, `route`, and the existing `@wordpress/i18n` entry unchanged):
+   ```jsonc
+   "@automattic/charts": "workspace:*",
+   ```
 
 ### Imports
 
-Add a value import for `PieChartUnresponsive` and a type import for `DataPointPercentage`
-from `@automattic/charts`, plus the chart CSS subpath. The `eslint-disable-next-line`
-comment is required — see "Why the CSS import" below.
+Add the two new import statements shown below. Leave the existing
+`import { __ } from '@wordpress/i18n';` line unchanged — do not re-add it. The
+`eslint-disable-next-line` comment is required — see "Why the CSS import" below.
 
 ```ts
+// Insert these two statements above the existing @wordpress/i18n import:
 import {
 	PieChartUnresponsive,
 	type DataPointPercentage,
 } from '@automattic/charts';
 // eslint-disable-next-line import/no-unresolved -- CSS subpath export; dist/index.css is gitignored and not built in the ESLint CI step
 import '@automattic/charts/style.css';
-import { __ } from '@wordpress/i18n'; // already present in stage.tsx — keep, do not re-add
 ```
 
 ### Mock data
