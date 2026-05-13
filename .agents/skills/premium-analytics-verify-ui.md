@@ -21,7 +21,8 @@ Verify that the analytics dashboard mounts correctly in wp-admin after a premium
 
 2. **Confirm Playwright Test runner is installed:**
    ```bash
-   playwright test --version > /dev/null 2>&1 || { echo "@playwright/test not found — rebuild sandbox image: docker compose -f tools/ai-sandbox/docker-compose.yml build jetpack-ai"; exit 1; }
+   command -v playwright > /dev/null 2>&1 || { echo "playwright binary not found on PATH — rebuild sandbox image: docker compose -f tools/ai-sandbox/docker-compose.yml build jetpack-ai"; exit 1; }
+   playwright test --version > /dev/null 2>&1 || { echo "@playwright/test runner not available — rebuild sandbox image: docker compose -f tools/ai-sandbox/docker-compose.yml build jetpack-ai"; exit 1; }
    ```
 
 3. **Confirm build artifacts exist:**

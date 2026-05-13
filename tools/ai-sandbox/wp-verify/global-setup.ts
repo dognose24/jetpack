@@ -17,16 +17,21 @@ const WP_BASE = process.env.WP_BASE || 'http://wordpress';
 const ARTIFACT_DIR = process.env.PA_VERIFY_ARTIFACT_DIR || '/tmp/pa-verify';
 const AUTH_FILE = path.join( ARTIFACT_DIR, 'auth.json' );
 const READINESS_TIMEOUT_MS = 60_000;
+const PER_REQUEST_TIMEOUT_MS = 3_000;
 
 /**
- * Poll wp-login.php until WordPress responds 2xx or the deadline elapses.
+ * Poll wp-login.php until WordPress responds 2xx or the deadline elapses. Each
+ * `fetch` is bounded by `PER_REQUEST_TIMEOUT_MS` via AbortSignal so a hung TCP
+ * connection cannot stall past the overall readiness deadline.
  */
 async function waitForWordPress(): Promise< void > {
 	const deadline = Date.now() + READINESS_TIMEOUT_MS;
 	let lastErr: unknown;
 	while ( Date.now() < deadline ) {
 		try {
-			const res = await fetch( `${ WP_BASE }/wp-login.php` );
+			const res = await fetch( `${ WP_BASE }/wp-login.php`, {
+				signal: AbortSignal.timeout( PER_REQUEST_TIMEOUT_MS ),
+			} );
 			if ( res.ok ) return;
 			lastErr = new Error( `wp-login.php returned ${ res.status }` );
 		} catch ( err ) {
