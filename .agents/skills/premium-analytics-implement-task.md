@@ -49,12 +49,17 @@ CURRENT=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
 if [ "$CURRENT" = "trunk" ] || [ -z "$CURRENT" ]; then
   # On trunk (or detached HEAD) — create the task's branch fresh from fork/trunk.
   git checkout -b <branch-name> fork/trunk
+  TARGET_BRANCH=<branch-name>
 else
   # Already on a feature branch — assume the caller wants to continue here
   # (e.g. bundling this task into an in-flight PR). Do not switch branches.
   echo "Continuing on existing branch: $CURRENT"
+  TARGET_BRANCH=$CURRENT
 fi
 ```
+
+`TARGET_BRANCH` is the branch name to push and reference in later steps — it may
+not equal `<branch-name>` from the task md when running in continue-on-branch mode.
 
 The "continue on existing branch" mode is what lets a single PR bundle multiple
 related changes — e.g. a docs commit on the same branch as the implementation.
@@ -130,8 +135,12 @@ edits from Step 5 must already be reverted — verify with `git status` before s
 ## Step 8 — Push and open or update PR
 
 ```bash
-git push fork <branch-name>
+git push fork "$TARGET_BRANCH"
 ```
+
+Use the `TARGET_BRANCH` captured in Step 1 — in continue-on-branch mode this may
+differ from `<branch-name>` in the task md, and pushing the wrong ref will either fail
+or publish stale work.
 
 If no PR exists yet for this branch, open one against `dognose24/jetpack` trunk using
 `/jetpack-pr`. If a PR is already open (continue-on-branch mode from Step 1), the push
@@ -150,16 +159,23 @@ Fill or update the Agent Session Report section in the PR body:
 
 ## Step 9 — Review cycle
 
-The `.github/workflows/pr-review-cycle.yml` workflow runs automatically on same-repo,
-non-draft PR branches once the push lands, so no manual trigger is needed in the common
-case.
+`.github/workflows/pr-review-cycle.yml` fires on `pull_request: [opened, ready_for_review]`
+(plus later review / comment / workflow_run events). It does **not** listen for
+`pull_request.synchronize`, so it only auto-starts the kickoff round when the PR is
+first opened or moved out of draft.
 
-If the workflow is not configured (e.g. missing repo secret), fall back to running the
-cycle in-session:
+* **Brand-new PR** (trunk-branch case from Step 1) — the workflow kicks off
+  automatically when the PR is opened.
+* **Update-existing-PR / continue-on-branch mode** — a subsequent push to an
+  already-open PR is `synchronize` and will not trigger a new round. Invoke manually:
 
-```bash
-/jetpack-pr-review-cycle <PR-number>
-```
+  ```bash
+  /jetpack-pr-review-cycle <PR-number>
+  ```
+
+Also fall back to manual invocation if the workflow is not configured for this repo
+(e.g. missing `ANTHROPIC_API_KEY`) or if a workflow path filter excludes the PR's
+changed files.
 
 Keep the sandbox session alive (tmux recommended) so all rounds complete without
 interruption.
