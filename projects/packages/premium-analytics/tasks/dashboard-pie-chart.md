@@ -141,7 +141,7 @@ text or remove it.
 
 - Mock data only — do not fetch, do not invent endpoints or stores
 - Do not claim these are real device-breakdown metrics in any UI copy
-- Do not modify anything outside `routes/dashboard/`, `routes/dashboard/package.json`, `projects/packages/premium-analytics/package.json`, and the changelog entry — these are the only exceptions listed in Scope above
+- Do not modify anything outside the files listed in the Scope section above — that list is the single source of truth for what this task may touch
 - Do not edit files in `build/`
 - Do not change the existing `<h1>` or welcome paragraph
 
