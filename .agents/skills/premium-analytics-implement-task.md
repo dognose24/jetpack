@@ -227,14 +227,24 @@ so durable evidence is the only way to tell from the PR alone:
 ```bash
 if [ -s /tmp/dod-report.md ]; then
   PR_NUM=$(gh pr view --json number -q .number)
-  {
+  if {
     echo "## DoD verification"
     echo ""
     cat /tmp/dod-report.md
-  } | gh pr comment "$PR_NUM" --body-file -
-  cp /dev/null /tmp/dod-report.md   # truncate using `cp` (allow-list friendly, no `rm` needed)
+  } | gh pr comment "$PR_NUM" --body-file -; then
+    # Only truncate after a successful post. `cp` is allow-list-friendly (no `rm` needed).
+    cp /dev/null /tmp/dod-report.md
+  else
+    echo "ERROR: failed to post DoD verification comment for PR #$PR_NUM. Buffer preserved at /tmp/dod-report.md — retry the post or treat the task as failed per HARD rules; do not proceed to Step 9." >&2
+    exit 1
+  fi
 fi
 ```
+
+The truncate is gated on `gh pr comment` succeeding. If posting fails (auth /
+network / PR doesn't exist / etc.), the buffer survives and the script exits
+non-zero — required because the HARD rule below treats a missing `## DoD
+verification` comment when Step 5 was in scope as task failure.
 
 ## Step 9 — Review cycle
 
