@@ -7,8 +7,9 @@
  * browser through it.
  *
  * Workers stay at 1 because the WP backend is shared single-tenant — parallel logins or
- * concurrent admin sessions can confuse cookies/nonces. Tests inside a single worker run
- * in declaration order and reuse the storageState produced by global-setup.
+ * concurrent admin sessions can confuse cookies/nonces. Within each spec file, tests run
+ * in declaration order; cross-file order is not guaranteed (Playwright sorts files by
+ * path). All tests inherit the storageState produced by global-setup.
  */
 
 import path from 'path';

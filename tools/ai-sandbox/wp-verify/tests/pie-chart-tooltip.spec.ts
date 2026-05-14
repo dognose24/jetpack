@@ -41,8 +41,11 @@ test.describe.skip( 'Pie chart interactions', () => {
 		}
 		await page.mouse.move( box.x + box.width / 2, box.y + box.height / 2 );
 
-		// Match the tooltip by content (Device Types mock from dashboard-pie-chart task).
-		const tooltip = page.getByText( /Desktop|Mobile|Tablet/ );
+		// Scope to the visx-tooltip portal container so we don't false-positive on legend
+		// labels (which also render the device-type strings). Then assert the tooltip is
+		// visible and contains one of the expected labels.
+		const tooltip = page.locator( '.visx-tooltip' );
 		await expect( tooltip ).toBeVisible( { timeout: 5_000 } );
+		await expect( tooltip ).toContainText( /Desktop|Mobile|Tablet/ );
 	} );
 } );
