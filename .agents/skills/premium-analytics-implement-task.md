@@ -94,6 +94,14 @@ Re-read the task md's `Definition of done` section. For each item in
 **Agent-verifiable** beyond the base build + UI verification (already covered by
 Steps 3–4), execute it.
 
+**Setup — clear stale state.** Wipe any leftover DoD-report buffer from a previous
+interrupted run before appending this cycle's results, so Step 8's posted comment
+reflects only this run:
+
+```bash
+rm -f /tmp/dod-report.md
+```
+
 Common pattern: **local-only regression injection** — the task spec defines a
 deliberate edit that should make a specific spec fail, then asks for revert. The
 injection commonly targets the same file the implementation already changed (e.g.
