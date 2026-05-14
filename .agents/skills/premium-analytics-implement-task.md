@@ -92,11 +92,11 @@ verification passes.
 
 **Setup — always run, even if no DoD items apply this cycle.** Truncate any leftover
 DoD-report buffer from a previous interrupted run, so Step 8 doesn't post stale
-content. Uses the shell no-op `:` + redirect, which truncates the file or creates it
-empty — avoids needing `rm` in the skill's allow-list:
+content. `cp /dev/null` is a portable single-command truncate using `cp` (already in
+the skill's allow-list):
 
 ```bash
-: > /tmp/dod-report.md
+cp /dev/null /tmp/dod-report.md
 ```
 
 This setup runs unconditionally, before the skip decision below — so even when this
@@ -178,12 +178,14 @@ pnpm jetpack changelogger add packages/premium-analytics \
 
 ## Step 7 — Commit
 
-The implementation is already staged from Step 5 (or, if Step 5 was skipped, stage
-the scope-allowed implementation files now). Stage the changelog entry added in
-Step 6 and commit.
+Stage every scope-allowed file unconditionally — `git add` is idempotent, so files
+already staged from Step 5's regression-injection pattern stay staged, and files
+left unstaged by a non-regression DoD path (or by skipping Step 5 entirely) are
+picked up. Then stage the changelog from Step 6 and commit:
 
 ```bash
-git status                       # confirm no unstaged injection remains; verify staged set matches Scope + changelog
+git status                       # confirm no unstaged injection remains; verify the working tree matches Scope + changelog
+git add <implementation-files>   # idempotent: stage anything in Scope not already in the index
 git add <changelog-path>         # stage the changelog entry from Step 6
 git commit -m "<conventional commit message>"
 ```
@@ -230,7 +232,7 @@ if [ -s /tmp/dod-report.md ]; then
     echo ""
     cat /tmp/dod-report.md
   } | gh pr comment "$PR_NUM" --body-file -
-  : > /tmp/dod-report.md   # truncate (no `rm` needed)
+  cp /dev/null /tmp/dod-report.md   # truncate using `cp` (allow-list friendly, no `rm` needed)
 fi
 ```
 
