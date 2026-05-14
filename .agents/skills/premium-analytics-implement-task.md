@@ -39,14 +39,30 @@ Read the task md fully before starting.
    - The changelog command
    - The scope (files allowed to touch)
 
-## Step 1 — Create branch from fork/trunk
+## Step 1 — Resolve target branch
+
+Read the branch name from the task md's Submitting section.
 
 ```bash
 git fetch fork
-git checkout -b <branch-name> fork/trunk
+CURRENT=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+if [ "$CURRENT" = "trunk" ] || [ -z "$CURRENT" ]; then
+  # On trunk (or detached HEAD) — create the task's branch fresh from fork/trunk.
+  git checkout -b <branch-name> fork/trunk
+  TARGET_BRANCH=<branch-name>
+else
+  # Already on a feature branch — assume the caller wants to continue here
+  # (e.g. bundling this task into an in-flight PR). Do not switch branches.
+  echo "Continuing on existing branch: $CURRENT"
+  TARGET_BRANCH=$CURRENT
+fi
 ```
 
-Use the exact branch name from the task md's Submitting section.
+`TARGET_BRANCH` is the branch name to push and reference in later steps — it may
+not equal `<branch-name>` from the task md when running in continue-on-branch mode.
+
+The "continue on existing branch" mode is what lets a single PR bundle multiple
+related changes — e.g. a docs commit on the same branch as the implementation.
 
 ## Step 2 — Implement
 
@@ -72,7 +88,43 @@ Build must succeed before proceeding. If it fails, fix the error and re-run.
 If verification fails, fix the root cause and re-run from Step 3. Do not proceed until
 verification passes.
 
-## Step 5 — Changelog
+## Step 5 — Execute additional Agent-verifiable DoD items
+
+Re-read the task md's `Definition of done` section. For each item in
+**Agent-verifiable** beyond the base build + UI verification (already covered by
+Steps 3–4), execute it.
+
+Common pattern: **local-only regression injection** — the task spec defines a
+deliberate edit that should make a specific spec fail, then asks for revert. The
+injection commonly targets the same file the implementation already changed (e.g.
+swapping a mock-data label in `stage.tsx`), so a naive `git checkout -- <file>`
+would discard the implementation along with the injection.
+
+Use the git index as a baseline snapshot: stage the implementation first so the
+revert is targeted to the injection only.
+
+1. **Stage the implementation** so the index holds the work to preserve:
+   ```bash
+   git add <implementation-files>
+   ```
+2. Apply the injection edit (a small, scoped change to a file inside Scope) — it
+   is now the only unstaged change in the tree.
+3. Rebuild: `CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build`.
+4. Re-run `/premium-analytics-verify-ui`.
+5. Confirm the expected spec fails (and that no other spec changes color).
+6. **Revert the injection only**: `git checkout -- <file>` restores the file from
+   the index, dropping the unstaged injection while keeping the staged
+   implementation intact.
+7. Rebuild and re-run `/premium-analytics-verify-ui`; the suite must be green again.
+
+If the expected failure does not occur, treat the task as failed and stop —
+the verification mechanism is not catching what the spec claims it catches.
+Report the discrepancy and do not proceed to commit until the cause is understood.
+
+Skip this step only if the task md's DoD has no Agent-verifiable items beyond the
+base build + UI verification.
+
+## Step 6 — Changelog
 
 Run the exact changelogger command from the task md's Submitting section:
 
@@ -82,23 +134,36 @@ pnpm jetpack changelogger add packages/premium-analytics \
   --entry="<entry from task md>"
 ```
 
-## Step 6 — Commit
+## Step 7 — Commit
+
+The implementation is already staged from Step 5 (or, if Step 5 was skipped, stage
+the scope-allowed implementation files now). Stage the changelog entry added in
+Step 6 and commit.
 
 ```bash
-git add -p   # stage only scope-allowed files + changelog
+git status                       # confirm no unstaged injection remains; verify staged set matches Scope + changelog
+git add <changelog-path>         # stage the changelog entry from Step 6
 git commit -m "<conventional commit message>"
 ```
 
 Do not stage or commit files outside the task's Scope section.
 
-## Step 7 — Push and open PR
+## Step 8 — Push and open or update PR
 
 ```bash
-git push fork <branch-name>
+git push fork "$TARGET_BRANCH"
 ```
 
-Then open a PR against `dognose24/jetpack` trunk using `/jetpack-pr`. Fill the Agent
-Session Report section in the PR body:
+Use the `TARGET_BRANCH` captured in Step 1 — in continue-on-branch mode this may
+differ from `<branch-name>` in the task md, and pushing the wrong ref will either fail
+or publish stale work.
+
+If no PR exists yet for this branch, open one against `dognose24/jetpack` trunk using
+`/jetpack-pr`. If a PR is already open (continue-on-branch mode from Step 1), the push
+updates it automatically — afterwards, update the PR title/description to cover the
+new scope.
+
+Fill or update the Agent Session Report section in the PR body:
 
 ```
 ## Agent Session Report
@@ -108,16 +173,28 @@ Session Report section in the PR body:
 - Human rework needed: none / minor / major
 ```
 
-## Step 8 — Start review cycle
+## Step 9 — Review cycle
 
-Once the PR is open, start the review cycle:
+`.github/workflows/pr-review-cycle.yml` fires on `pull_request: [opened, ready_for_review]`
+(plus later review / comment / workflow_run events). It does **not** listen for
+`pull_request.synchronize`, so it only auto-starts the kickoff round when the PR is
+first opened or moved out of draft.
 
-```bash
-/jetpack-pr-review-cycle <PR-number>
-```
+* **Brand-new PR** (trunk-branch case from Step 1) — the workflow kicks off
+  automatically when the PR is opened.
+* **Update-existing-PR / continue-on-branch mode** — a subsequent push to an
+  already-open PR is `synchronize` and will not trigger a new round. Invoke manually:
 
-This runs in the foreground. Keep the sandbox session alive (tmux recommended) so all
-review rounds complete without interruption.
+  ```bash
+  /jetpack-pr-review-cycle <PR-number>
+  ```
+
+Also fall back to manual invocation if the workflow is not configured for this repo
+(e.g. missing `ANTHROPIC_API_KEY`) or if a workflow path filter excludes the PR's
+changed files.
+
+Keep the sandbox session alive (tmux recommended) so all rounds complete without
+interruption.
 
 ## HARD rules
 
