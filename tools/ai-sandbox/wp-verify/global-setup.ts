@@ -32,6 +32,9 @@ async function waitForWordPress(): Promise< void > {
 			const res = await fetch( `${ WP_BASE }/wp-login.php`, {
 				signal: AbortSignal.timeout( PER_REQUEST_TIMEOUT_MS ),
 			} );
+			// Cancel the body so undici returns the connection to the pool — otherwise
+			// repeated polling can accumulate stuck sockets.
+			await res.body?.cancel();
 			if ( res.ok ) return;
 			lastErr = new Error( `wp-login.php returned ${ res.status }` );
 		} catch ( err ) {

@@ -8,8 +8,11 @@
  * Notes on hovering `@automattic/charts`:
  *
  * `@visx/tooltip`'s `useTooltipInPortal` renders the tooltip outside the chart's DOM
- * subtree (typically appended to the chart's `containerRef` or `document.body`). Match it
- * by content, not by class.
+ * subtree (typically appended to the chart's `containerRef` or `document.body`). Scope to
+ * the visx-supplied `.visx-tooltip` container so the assertion does not false-positive on
+ * legend labels elsewhere on the page, then assert the expected text within that scope.
+ * If a future visx upgrade drops the `.visx-tooltip` class, switch to a stable role/test
+ * id or a wrapper element under the package's own control.
  *
  * `locator.hover()` over SVG children sometimes fails to fire visx's mouse handlers
  * because the handlers are attached to the parent `<g>`. The robust pattern is
