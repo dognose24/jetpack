@@ -42,10 +42,13 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
     apt-get update && apt-get install -y docker-ce-cli docker-compose-plugin && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Playwright + Chromium for UI verification
+# Install Playwright + @playwright/test runner + Chromium for UI verification.
+# `playwright` provides the browser drivers; `@playwright/test` provides the test runner,
+# fixtures, and `expect` API used by the wp-verify Playwright Test suite under
+# tools/ai-sandbox/wp-verify/. Versions stay in lockstep.
 # --with-deps lets Playwright manage its own OS dependencies, avoiding a brittle manual apt list.
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
-RUN npm install -g playwright@1.48.2 \
+RUN npm install -g playwright@1.48.2 @playwright/test@1.48.2 \
     && playwright install --with-deps chromium
 
 # Install Composer 2.9.2

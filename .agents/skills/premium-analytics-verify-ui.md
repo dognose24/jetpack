@@ -19,9 +19,10 @@ Verify that the analytics dashboard mounts correctly in wp-admin after a premium
    docker info > /dev/null 2>&1 || { echo "Docker socket not available — run inside jetpack-ai-sandbox"; exit 1; }
    ```
 
-2. **Confirm Playwright is installed:**
+2. **Confirm Playwright Test runner is installed:**
    ```bash
-   playwright --version > /dev/null 2>&1 || { echo "Playwright not found — rebuild sandbox image"; exit 1; }
+   command -v playwright > /dev/null 2>&1 || { echo "playwright binary not found on PATH — rebuild sandbox image: docker compose -f tools/ai-sandbox/docker-compose.yml build jetpack-ai"; exit 1; }
+   playwright test --version > /dev/null 2>&1 || { echo "@playwright/test runner not available — rebuild sandbox image: docker compose -f tools/ai-sandbox/docker-compose.yml build jetpack-ai"; exit 1; }
    ```
 
 3. **Confirm build artifacts exist:**
@@ -78,11 +79,27 @@ echo "wpcli setup complete."
 
 ## Step 3 — Run Playwright verification
 
+Run the Playwright Test suite against the wp-verify environment:
+
 ```bash
-NODE_PATH=$(npm root -g) node tools/ai-sandbox/wp-verify/check.cjs
+playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts
 ```
 
-Exit 0 = pass. Non-zero = the error message will indicate what failed.
+The suite lives under `tools/ai-sandbox/wp-verify/tests/`:
+
+- `dashboard-mount.spec.ts` — mount + heading, height-bounded, no zero-height SVG
+- `pie-chart-tooltip.spec.ts` — skipped until a pie chart is rendered on the dashboard
+
+The mount spec also writes a fresh screenshot to `/tmp/pa-verify/analytics-dashboard.png`,
+which Step 4 commits.
+
+Exit 0 = all specs passed (skipped counts as passed). Non-zero = the runner's terminal
+output names the failing spec(s); rerun a single failing one with
+`playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts <spec-name>`
+to iterate.
+
+The legacy `node tools/ai-sandbox/wp-verify/check.cjs` script is **deprecated** and kept
+only as a temporary fallback. Do not invoke it for normal verification.
 
 ## Step 4 — Commit screenshot
 
@@ -129,11 +146,12 @@ GitHub retains the object, long enough for reviewers.
 ## Step 5 — Report result
 
 On success:
-- Log: `✓ Analytics dashboard mounted without uncaught JS exceptions`
+- `playwright test` exits 0 and prints a summary like `2 passed (2 skipped)` on a chartless dashboard — the zero-height-SVG test skips when no charts are present, and the `pie-chart-tooltip` spec is skipped until that task lands
 - The screenshot is committed and visible in the PR description
 
 On failure:
-- Log the full error
+- `playwright test` exits non-zero; the list reporter names the failing spec
+- For deeper inspection (trace, video, full-page screenshot of the failure), look in `/tmp/pa-verify/playwright-output/` — the config retains trace and video on failure
 - Do NOT mark the Definition of Done as complete
 - Fix the root cause and re-run from Step 3 (WordPress stays up between runs)
 

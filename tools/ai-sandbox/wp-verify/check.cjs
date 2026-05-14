@@ -1,7 +1,11 @@
+// DEPRECATED — superseded by the Playwright Test suite under ./tests/.
+// Kept temporarily as a fallback while the new runner stabilizes; the
+// `/premium-analytics-verify-ui` skill now invokes `playwright test` against
+// ./playwright.config.ts. Remove this file once the new runner has been used
+// on the next two verify-ui rounds without regression.
+//
 // CommonJS so NODE_PATH is honoured when resolving the globally-installed playwright package.
 // Wrapped in an async IIFE because top-level await is not valid in CommonJS.
-/* eslint-disable no-console */
-/* global process */
 
 const fs = require( 'fs' );
 const path = require( 'path' );
