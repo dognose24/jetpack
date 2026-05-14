@@ -27,12 +27,11 @@ You are authorized to: push commits, comment on the PR, add/remove `[Status] *` 
    Must be a jetpack fork (name ends with `/jetpack`). Fail if `gh repo view` errors.
 2. **Auth** — `gh auth status` must succeed.
 3. **Branch** — capture the current branch (`BRANCH=$(git rev-parse --abbrev-ref HEAD)`). The loop assumes commits go on this branch, not `trunk`.
-4. **State file** — `.claude/pr-review-state.json` in the working copy tracks comment IDs already addressed across rounds. Create if missing:
+4. **State file** — `/tmp/pr-review-state.json` tracks comment IDs already addressed across rounds. Lives outside the repo and outside `.claude/` so it (a) doesn't pollute the working tree, (b) doesn't need a per-write `.gitignore`/`.git/info/exclude` entry, and (c) doesn't trip Claude Code's sensitive-file gate on every write (everything under `.claude/` is treated as sensitive even with `--dangerously-skip-permissions`, which would force a permission prompt every round). Create if missing:
    ```bash
-   mkdir -p .claude
-   test -f .claude/pr-review-state.json || echo '{"addressed_ids": [], "rerun_counts": {}}' > .claude/pr-review-state.json
-   echo '.claude/pr-review-state.json' >> .git/info/exclude   # make sure it isn't committed
+   test -f /tmp/pr-review-state.json || echo '{"addressed_ids": [], "rerun_counts": {}}' > /tmp/pr-review-state.json
    ```
+   The file is per-container ephemeral by design — each new review cycle resets it at the start, and a single cycle typically completes within one container lifetime, so loss on container restart is harmless (worst case: idempotent re-processing of already-addressed comments).
 5. **PR-owner set** — compute once per round (assignees can change):
    ```bash
    gh pr view <PR> --json author,assignees \
@@ -58,7 +57,7 @@ gh api "repos/$REPO/pulls/<PR>/comments" --paginate \
 gh pr view <PR> --repo "$REPO" --json reviews,comments \
   > /tmp/pr-<PR>-reviews-r${ROUND}.json
 ```
-Compare to prior rounds via `.claude/pr-review-state.json`. Any comment ID not in `addressed_ids` is **new** for this round.
+Compare to prior rounds via `/tmp/pr-review-state.json`. Any comment ID not in `addressed_ids` is **new** for this round.
 ### b. Source filter — who to listen to
 Apply this **before** classifying comments as actionable.
 **Addressable sources:**
@@ -95,7 +94,7 @@ gh run view "$RUN_ID" --log-failed | tail -300
 ```
 Triage:
 - **Failure points at our code** → fix it, commit, push (commit message: `Fix CI: <check name> — <short reason>`).
-- **Flaky / transient** (unrelated area, known intermittent) → `gh run rerun "$RUN_ID"`. Track per-check rerun count in `.claude/pr-review-state.json` under `rerun_counts`. Cap at **2 reruns per check** before flagging.
+- **Flaky / transient** (unrelated area, known intermittent) → `gh run rerun "$RUN_ID"`. Track per-check rerun count in `/tmp/pr-review-state.json` under `rerun_counts`. Cap at **2 reruns per check** before flagging.
 - **Persistently failing and unrelated to this change** → post a PR comment documenting the analysis, flag in final report. Do NOT block the `clean` transition unless the failing check is security-related (security checks are always blocking).
 ### e. Keep the branch current with trunk (every round)
 Keeping the PR rebased on fresh trunk is a **requirement**, not just a conflict-resolution step. Stale branches accumulate behind-counts that cause CI flakes (foundations builds drift, lockfile mismatches, jest snapshot churn) and make reviewers re-read context that's already merged. Rebase every round when the branch is behind, even if `mergeable: MERGEABLE`.
@@ -142,7 +141,7 @@ gh api -X POST "repos/$REPO/pulls/<PR>/requested_reviewers" \
 gh pr comment <PR> --body "@claude please re-review."
 ```
 ### h. Persist state and sleep
-Write the updated `addressed_ids` and `rerun_counts` back to `.claude/pr-review-state.json`. Then:
+Write the updated `addressed_ids` and `rerun_counts` back to `/tmp/pr-review-state.json`. Then:
 ```bash
 sleep 600
 ```
