@@ -116,6 +116,20 @@ revert is targeted to the injection only.
    the index, dropping the unstaged injection while keeping the staged
    implementation intact.
 7. Rebuild and re-run `/premium-analytics-verify-ui`; the suite must be green again.
+8. **Record outcome durably** — append a structured block to `/tmp/dod-report.md`. This file is consumed in Step 8 and posted to the PR, so the verification leaves a trace that survives the session:
+
+   ```bash
+   cat >> /tmp/dod-report.md << 'EOF'
+   - **<one-line DoD item title from the task md>**: PASS
+     - Edit applied: <e.g. `'Desktop'` → `'Workstation'` in `routes/dashboard/stage.tsx`>
+     - Expected failing spec: <`spec-path:line` and the assertion that should fail>
+     - Actual failure: <yes — paste the runner's failure-message excerpt>
+     - Other specs: <green throughout / which changed>
+     - Revert + re-run: <playwright summary, e.g. `4 passed (0 skipped)`>
+   EOF
+   ```
+
+   Do not commit this file (`/tmp/` is outside the repo so this is automatic).
 
 If the expected failure does not occur, treat the task as failed and stop —
 the verification mechanism is not catching what the spec claims it catches.
@@ -173,6 +187,23 @@ Fill or update the Agent Session Report section in the PR body:
 - Human rework needed: none / minor / major
 ```
 
+If Step 5 ran (i.e. `/tmp/dod-report.md` exists), post the accumulated outcomes as a
+PR comment so reviewers can verify what was actually executed — the post-revert state
+is identical whether Step 5 ran clean or was skipped, so durable evidence is the only
+way to tell from the PR alone:
+
+```bash
+if [ -f /tmp/dod-report.md ]; then
+  PR_NUM=$(gh pr view --json number -q .number)
+  {
+    echo "## DoD verification"
+    echo ""
+    cat /tmp/dod-report.md
+  } | gh pr comment "$PR_NUM" --body-file -
+  rm /tmp/dod-report.md
+fi
+```
+
 ## Step 9 — Review cycle
 
 `.github/workflows/pr-review-cycle.yml` fires on `pull_request: [opened, ready_for_review]`
@@ -203,3 +234,4 @@ interruption.
 - Never edit files in `build/`.
 - Never merge or close the PR — that is always the human's call.
 - If any step fails, stop and report the error. Do not skip steps.
+- If Step 5 ran (task md DoD has Agent-verifiable items beyond build + UI verification), the PR **must** contain a `## DoD verification` comment posted in Step 8. The post-revert filesystem state is identical whether Step 5 ran clean or was silently skipped, so this comment is the only durable evidence the verification mechanism actually fired. Missing comment when Step 5 was in scope = treat the task as failed.
