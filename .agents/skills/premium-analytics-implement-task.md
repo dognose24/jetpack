@@ -39,14 +39,25 @@ Read the task md fully before starting.
    - The changelog command
    - The scope (files allowed to touch)
 
-## Step 1 — Create branch from fork/trunk
+## Step 1 — Resolve target branch
+
+Read the branch name from the task md's Submitting section.
 
 ```bash
 git fetch fork
-git checkout -b <branch-name> fork/trunk
+CURRENT=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+if [ "$CURRENT" = "trunk" ] || [ -z "$CURRENT" ]; then
+  # On trunk (or detached HEAD) — create the task's branch fresh from fork/trunk.
+  git checkout -b <branch-name> fork/trunk
+else
+  # Already on a feature branch — assume the caller wants to continue here
+  # (e.g. bundling this task into an in-flight PR). Do not switch branches.
+  echo "Continuing on existing branch: $CURRENT"
+fi
 ```
 
-Use the exact branch name from the task md's Submitting section.
+The "continue on existing branch" mode is what lets a single PR bundle multiple
+related changes — e.g. a docs commit on the same branch as the implementation.
 
 ## Step 2 — Implement
 
@@ -72,7 +83,31 @@ Build must succeed before proceeding. If it fails, fix the error and re-run.
 If verification fails, fix the root cause and re-run from Step 3. Do not proceed until
 verification passes.
 
-## Step 5 — Changelog
+## Step 5 — Execute additional Agent-verifiable DoD items
+
+Re-read the task md's `Definition of done` section. For each item in
+**Agent-verifiable** beyond the base build + UI verification (already covered by
+Steps 3–4), execute it.
+
+Common pattern: **local-only regression injection** — the task spec defines a
+deliberate edit that should make a specific spec fail, then asks for revert. For
+each such item:
+
+1. Apply the injection edit (a small, scoped change to a file inside Scope).
+2. Rebuild: `CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build`.
+3. Re-run `/premium-analytics-verify-ui`.
+4. Confirm the expected spec fails (and that no other spec changes color).
+5. **Revert the edit** (`git checkout -- <file>`), rebuild.
+6. Re-run `/premium-analytics-verify-ui` once more; the suite must be green again.
+
+If the expected failure does not occur, treat the task as failed and stop —
+the verification mechanism is not catching what the spec claims it catches.
+Report the discrepancy and do not proceed to commit until the cause is understood.
+
+Skip this step only if the task md's DoD has no Agent-verifiable items beyond the
+base build + UI verification.
+
+## Step 6 — Changelog
 
 Run the exact changelogger command from the task md's Submitting section:
 
@@ -82,23 +117,28 @@ pnpm jetpack changelogger add packages/premium-analytics \
   --entry="<entry from task md>"
 ```
 
-## Step 6 — Commit
+## Step 7 — Commit
 
 ```bash
 git add -p   # stage only scope-allowed files + changelog
 git commit -m "<conventional commit message>"
 ```
 
-Do not stage or commit files outside the task's Scope section.
+Do not stage or commit files outside the task's Scope section. Any regression-injection
+edits from Step 5 must already be reverted — verify with `git status` before staging.
 
-## Step 7 — Push and open PR
+## Step 8 — Push and open or update PR
 
 ```bash
 git push fork <branch-name>
 ```
 
-Then open a PR against `dognose24/jetpack` trunk using `/jetpack-pr`. Fill the Agent
-Session Report section in the PR body:
+If no PR exists yet for this branch, open one against `dognose24/jetpack` trunk using
+`/jetpack-pr`. If a PR is already open (continue-on-branch mode from Step 1), the push
+updates it automatically — afterwards, update the PR title/description to cover the
+new scope.
+
+Fill or update the Agent Session Report section in the PR body:
 
 ```
 ## Agent Session Report
@@ -108,16 +148,21 @@ Session Report section in the PR body:
 - Human rework needed: none / minor / major
 ```
 
-## Step 8 — Start review cycle
+## Step 9 — Review cycle
 
-Once the PR is open, start the review cycle:
+The `.github/workflows/pr-review-cycle.yml` workflow runs automatically on same-repo,
+non-draft PR branches once the push lands, so no manual trigger is needed in the common
+case.
+
+If the workflow is not configured (e.g. missing repo secret), fall back to running the
+cycle in-session:
 
 ```bash
 /jetpack-pr-review-cycle <PR-number>
 ```
 
-This runs in the foreground. Keep the sandbox session alive (tmux recommended) so all
-review rounds complete without interruption.
+Keep the sandbox session alive (tmux recommended) so all rounds complete without
+interruption.
 
 ## HARD rules
 
