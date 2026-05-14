@@ -95,15 +95,27 @@ Re-read the task md's `Definition of done` section. For each item in
 Steps 3–4), execute it.
 
 Common pattern: **local-only regression injection** — the task spec defines a
-deliberate edit that should make a specific spec fail, then asks for revert. For
-each such item:
+deliberate edit that should make a specific spec fail, then asks for revert. The
+injection commonly targets the same file the implementation already changed (e.g.
+swapping a mock-data label in `stage.tsx`), so a naive `git checkout -- <file>`
+would discard the implementation along with the injection.
 
-1. Apply the injection edit (a small, scoped change to a file inside Scope).
-2. Rebuild: `CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build`.
-3. Re-run `/premium-analytics-verify-ui`.
-4. Confirm the expected spec fails (and that no other spec changes color).
-5. **Revert the edit** (`git checkout -- <file>`), rebuild.
-6. Re-run `/premium-analytics-verify-ui` once more; the suite must be green again.
+Use the git index as a baseline snapshot: stage the implementation first so the
+revert is targeted to the injection only.
+
+1. **Stage the implementation** so the index holds the work to preserve:
+   ```bash
+   git add <implementation-files>
+   ```
+2. Apply the injection edit (a small, scoped change to a file inside Scope) — it
+   is now the only unstaged change in the tree.
+3. Rebuild: `CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build`.
+4. Re-run `/premium-analytics-verify-ui`.
+5. Confirm the expected spec fails (and that no other spec changes color).
+6. **Revert the injection only**: `git checkout -- <file>` restores the file from
+   the index, dropping the unstaged injection while keeping the staged
+   implementation intact.
+7. Rebuild and re-run `/premium-analytics-verify-ui`; the suite must be green again.
 
 If the expected failure does not occur, treat the task as failed and stop —
 the verification mechanism is not catching what the spec claims it catches.
@@ -124,13 +136,17 @@ pnpm jetpack changelogger add packages/premium-analytics \
 
 ## Step 7 — Commit
 
+The implementation is already staged from Step 5 (or, if Step 5 was skipped, stage
+the scope-allowed implementation files now). Stage the changelog entry added in
+Step 6 and commit.
+
 ```bash
-git add -p   # stage only scope-allowed files + changelog
+git status                       # confirm no unstaged injection remains; verify staged set matches Scope + changelog
+git add <changelog-path>         # stage the changelog entry from Step 6
 git commit -m "<conventional commit message>"
 ```
 
-Do not stage or commit files outside the task's Scope section. Any regression-injection
-edits from Step 5 must already be reverted — verify with `git status` before staging.
+Do not stage or commit files outside the task's Scope section.
 
 ## Step 8 — Push and open or update PR
 
