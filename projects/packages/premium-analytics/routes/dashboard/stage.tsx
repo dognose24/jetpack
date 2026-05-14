@@ -3,9 +3,9 @@ import '@automattic/charts/style.css';
 import { __ } from '@wordpress/i18n';
 
 const DEVICE_TYPES: DataPointPercentage[] = [
-	{ label: 'Desktop', value: 5400 },
-	{ label: 'Mobile', value: 3800 },
-	{ label: 'Tablet', value: 800 },
+	{ label: __( 'Desktop', 'jetpack-premium-analytics' ), value: 5400 },
+	{ label: __( 'Mobile', 'jetpack-premium-analytics' ), value: 3800 },
+	{ label: __( 'Tablet', 'jetpack-premium-analytics' ), value: 800 },
 ];
 
 export const stage = () => {
