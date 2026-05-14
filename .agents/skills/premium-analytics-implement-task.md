@@ -90,23 +90,33 @@ verification passes.
 
 ## Step 5 — Execute additional Agent-verifiable DoD items
 
-Re-read the task md's `Definition of done` section. For each item in
-**Agent-verifiable** beyond the base build + UI verification (already covered by
-Steps 3–4), execute it.
-
-**Setup — clear stale state.** Wipe any leftover DoD-report buffer from a previous
-interrupted run before appending this cycle's results, so Step 8's posted comment
-reflects only this run:
+**Setup — always run, even if no DoD items apply this cycle.** Truncate any leftover
+DoD-report buffer from a previous interrupted run, so Step 8 doesn't post stale
+content. Uses the shell no-op `:` + redirect, which truncates the file or creates it
+empty — avoids needing `rm` in the skill's allow-list:
 
 ```bash
-rm -f /tmp/dod-report.md
+: > /tmp/dod-report.md
 ```
 
-Common pattern: **local-only regression injection** — the task spec defines a
-deliberate edit that should make a specific spec fail, then asks for revert. The
-injection commonly targets the same file the implementation already changed (e.g.
-swapping a mock-data label in `stage.tsx`), so a naive `git checkout -- <file>`
-would discard the implementation along with the injection.
+This setup runs unconditionally, before the skip decision below — so even when this
+cycle has no Agent-verifiable items beyond build + UI verification, the buffer is
+guaranteed empty and Step 8's non-empty check stays silent.
+
+Re-read the task md's `Definition of done` section. If there are no Agent-verifiable
+items beyond the base build + UI verification (already covered by Steps 3–4), skip
+the rest of this step.
+
+For each remaining Agent-verifiable item, execute it (per the common pattern below
+or task-specific instructions) **and then record the outcome** (required for every
+item — see the Record outcome section after the pattern).
+
+### Common pattern: local-only regression injection
+
+The task spec defines a deliberate edit that should make a specific spec fail, then
+asks for revert. The injection commonly targets the same file the implementation
+already changed (e.g. swapping a mock-data label in `stage.tsx`), so a naive
+`git checkout -- <file>` would discard the implementation along with the injection.
 
 Use the git index as a baseline snapshot: stage the implementation first so the
 revert is targeted to the injection only.
@@ -124,27 +134,37 @@ revert is targeted to the injection only.
    the index, dropping the unstaged injection while keeping the staged
    implementation intact.
 7. Rebuild and re-run `/premium-analytics-verify-ui`; the suite must be green again.
-8. **Record outcome durably** — append a structured block to `/tmp/dod-report.md`. This file is consumed in Step 8 and posted to the PR, so the verification leaves a trace that survives the session:
-
-   ```bash
-   cat >> /tmp/dod-report.md << 'EOF'
-   - **<one-line DoD item title from the task md>**: PASS
-     - Edit applied: <e.g. `'Desktop'` → `'Workstation'` in `routes/dashboard/stage.tsx`>
-     - Expected failing spec: <`spec-path:line` and the assertion that should fail>
-     - Actual failure: <yes — paste the runner's failure-message excerpt>
-     - Other specs: <green throughout / which changed>
-     - Revert + re-run: <playwright summary, e.g. `4 passed (0 skipped)`>
-   EOF
-   ```
-
-   Do not commit this file (`/tmp/` is outside the repo so this is automatic).
 
 If the expected failure does not occur, treat the task as failed and stop —
 the verification mechanism is not catching what the spec claims it catches.
 Report the discrepancy and do not proceed to commit until the cause is understood.
 
-Skip this step only if the task md's DoD has no Agent-verifiable items beyond the
-base build + UI verification.
+### Record outcome — required for every Agent-verifiable item
+
+This applies to **every** Agent-verifiable DoD item executed in Step 5, not only
+the regression-injection pattern. After verifying the item, append a structured
+block to `/tmp/dod-report.md` so Step 8 can post it as durable evidence:
+
+```bash
+cat >> /tmp/dod-report.md << 'EOF'
+- **<one-line DoD item title from the task md>**: PASS
+  - <one or more lines describing how the item was verified — fields vary by item>
+EOF
+```
+
+For the regression-injection pattern specifically, fill in:
+- Edit applied: `<e.g. 'Desktop' → 'Workstation' in routes/dashboard/stage.tsx>`
+- Expected failing spec: `<spec-path:line and the assertion that should fail>`
+- Actual failure: `<yes — paste the runner's failure-message excerpt>`
+- Other specs: `<green throughout / which changed>`
+- Revert + re-run: `<playwright summary, e.g. 4 passed (0 skipped)>`
+
+For other Agent-verifiable items (deterministic CLI output, specific feature
+behavior assertion, etc.), record the equivalent: what was checked, what the
+expected outcome was, what was observed.
+
+Do not commit `/tmp/dod-report.md` — `/tmp/` is outside the repo so this is
+automatic.
 
 ## Step 6 — Changelog
 
@@ -195,20 +215,22 @@ Fill or update the Agent Session Report section in the PR body:
 - Human rework needed: none / minor / major
 ```
 
-If Step 5 ran (i.e. `/tmp/dod-report.md` exists), post the accumulated outcomes as a
-PR comment so reviewers can verify what was actually executed — the post-revert state
-is identical whether Step 5 ran clean or was skipped, so durable evidence is the only
-way to tell from the PR alone:
+If Step 5 recorded any DoD outcomes (i.e. `/tmp/dod-report.md` is non-empty — the
+setup in Step 5 truncates the file unconditionally, so a non-empty buffer is the
+real signal that Step 5 ran items, distinct from "Step 5 was skipped this cycle"),
+post them as a PR comment so reviewers can verify what was actually executed. The
+post-revert filesystem state is identical whether Step 5 ran clean or was skipped,
+so durable evidence is the only way to tell from the PR alone:
 
 ```bash
-if [ -f /tmp/dod-report.md ]; then
+if [ -s /tmp/dod-report.md ]; then
   PR_NUM=$(gh pr view --json number -q .number)
   {
     echo "## DoD verification"
     echo ""
     cat /tmp/dod-report.md
   } | gh pr comment "$PR_NUM" --body-file -
-  rm /tmp/dod-report.md
+  : > /tmp/dod-report.md   # truncate (no `rm` needed)
 fi
 ```
 
