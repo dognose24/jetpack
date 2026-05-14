@@ -17,6 +17,7 @@ You may only touch:
 - `routes/dashboard/stage.tsx`
 - `routes/dashboard/package.json` — add `@automattic/charts` as a dependency
 - `projects/packages/premium-analytics/package.json` (only if a dependency needs to be added)
+- `tools/ai-sandbox/wp-verify/tests/pie-chart-tooltip.spec.ts` — unskip the placeholder spec and prune its header note
 - `changelog/` (one entry added via `pnpm jetpack changelogger add`)
 
 Do not create new routes, new packages, or new files outside these locations.
@@ -103,6 +104,15 @@ The final `stage.tsx` body should read:
 </div>
 ```
 
+### Unskip the hover/tooltip interaction spec
+
+`tools/ai-sandbox/wp-verify/tests/pie-chart-tooltip.spec.ts` ships as a `test.describe.skip(...)` placeholder. With the pie chart now on the dashboard, the spec can run.
+
+1. Change `test.describe.skip( 'Pie chart interactions', () => {` → `test.describe( 'Pie chart interactions', () => {`.
+2. Drop the leading "Currently SKIPPED — …" paragraph from the file's header comment. Keep the visx-portal note and SVG-hover note — both remain relevant for anyone touching the spec later.
+
+After unskipping, the full suite output should be `4 passed (0 skipped)`: the three dashboard-mount tests (the zero-height-SVG test no longer skips because an SVG is now present) plus the unskipped pie-chart hover test.
+
 ## Why PieChartUnresponsive
 
 `PieChartUnresponsive` skips the `withResponsive` HOC, which means it does not use
@@ -139,7 +149,8 @@ text or remove it.
 
 **Agent-verifiable (required before push):**
 - [ ] Build succeeds
-- [ ] UI verification passes: run `/premium-analytics-verify-ui` inside `jetpack-ai-sandbox`
+- [ ] UI verification passes: run `/premium-analytics-verify-ui` inside `jetpack-ai-sandbox` — output is `4 passed (0 skipped)`
+- [ ] **Hover regression injection** (local-only, do not commit): change `'Desktop'` → `'Workstation'` in `DEVICE_TYPES`, rebuild, rerun the suite, confirm `pie-chart-tooltip.spec.ts` fails on the `toContainText(/Desktop|Mobile|Tablet/)` assertion, then revert and confirm the suite is green again. This proves the hover/tooltip mechanism actually catches a tooltip-content regression rather than passing vacuously.
 
 **Human-verifiable (PR review):**
 - [ ] Pie chart renders in `wp-admin` below the welcome paragraph with three labelled segments (Desktop, Mobile, Tablet)
