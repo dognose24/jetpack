@@ -1,10 +1,6 @@
 /**
  * Pie chart hover/tooltip interaction.
  *
- * Currently SKIPPED — the dashboard route on `fork/trunk` is the clean state (no
- * charts). Unskip when the `dashboard-pie-chart` task lands a `PieChartUnresponsive`
- * on the dashboard (see `projects/packages/premium-analytics/tasks/dashboard-pie-chart.md`).
- *
  * Notes on hovering `@automattic/charts`:
  *
  * `@visx/tooltip`'s `useTooltipInPortal` renders the tooltip outside the chart's DOM
@@ -28,7 +24,7 @@ import { test, expect } from '@playwright/test';
 const ANALYTICS_URL = '/wp-admin/admin.php?page=jetpack-premium-analytics';
 const DASHBOARD_ROOT = '.jetpack-premium-analytics-dashboard';
 
-test.describe.skip( 'Pie chart interactions', () => {
+test.describe( 'Pie chart interactions', () => {
 	test( 'hover on a segment reveals tooltip with the segment label and value', async ( {
 		page,
 	} ) => {
