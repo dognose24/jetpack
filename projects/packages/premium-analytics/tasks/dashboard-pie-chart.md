@@ -53,7 +53,9 @@ remove any other fields):
 
 Add the two new import statements shown below. Leave the existing
 `import { __ } from '@wordpress/i18n';` line unchanged — do not re-add it. The
-`eslint-disable-next-line` comment is required — see "Why the CSS import" below.
+inline `eslint-disable-line` comment on the CSS import line is required — see
+"Why the CSS import" below for the rationale, and "Why the disable comment must
+be inline" for why it lives at the end of the line and not on the line above.
 
 ```ts
 // Insert these two statements above the existing @wordpress/i18n import:
@@ -61,8 +63,7 @@ import {
 	PieChartUnresponsive,
 	type DataPointPercentage,
 } from '@automattic/charts';
-// eslint-disable-next-line import/no-unresolved -- CSS subpath export; dist/index.css is gitignored and not built in the ESLint CI step
-import '@automattic/charts/style.css';
+import '@automattic/charts/style.css'; // eslint-disable-line import/no-unresolved -- CSS subpath export; dist/index.css is gitignored and not built in the ESLint CI step
 ```
 
 ### Mock data
@@ -134,11 +135,21 @@ descender space from causing that internal measurement to drift upward on each c
 auto-inject styles. Without it the rule is never applied and the chart height grows
 indefinitely.
 
-The `eslint-disable-next-line import/no-unresolved` comment is required because
+The inline `eslint-disable-line import/no-unresolved` comment is required because
 `@automattic/charts/style.css` is a subpath export that resolves to `dist/index.css`,
 which is gitignored and the ESLint CI step does not run the charts package build, so the
 resolver cannot find the file at lint time. Leave the comment in place; do not edit its
 text or remove it.
+
+## Why the disable comment must be inline
+
+Use `eslint-disable-line` on the same line as the import — **not** `eslint-disable-next-line` on the line above. The next-line form looks cleaner but doesn't survive this repo's lint/format toolchain end-to-end:
+
+* Prettier (run by the pre-commit hook) inserts a blank line between import groups, which separates the next-line comment from the import it was annotating.
+* Locally the charts package is usually built, so `dist/index.css` exists and ESLint's auto-fix sees the disable comment as "unused" and removes it.
+* CI's lint job runs without the charts package built, so the import is unresolved — but the disable comment was already deleted locally and committed away, so CI fails.
+
+The inline `disable-line` form has none of these failure modes: prettier doesn't move trailing comments, and ESLint won't auto-remove it because the rule it disables actually fires (in the CI environment where the file is unresolved).
 
 ## Constraints
 
