@@ -107,9 +107,10 @@ Keeping the PR rebased on fresh trunk is a **requirement**, not just a conflict-
 # `fatal: 'fork' does not appear to be a git repository` deep in step (e).
 # Stop here with a clear setup hint instead.
 git remote get-url fork >/dev/null 2>&1 || {
-  echo "ERROR: 'fork' git remote not configured. Set it up once with:"
-  echo "  git remote add fork git@github.com:dognose24/jetpack.git"
-  echo "  git fetch fork"
+  echo "ERROR: 'fork' git remote not configured. Set it up once with either:"
+  echo "  git remote add fork https://github.com/dognose24/jetpack.git   # HTTPS (works in sandboxes/CI without SSH keys)"
+  echo "  git remote add fork git@github.com:dognose24/jetpack.git       # SSH (when SSH keys are configured)"
+  echo "Then: git fetch fork"
   exit 1
 }
 
