@@ -102,6 +102,16 @@ Keeping the PR rebased on fresh trunk is a **requirement**, not just a conflict-
 **Rebase target is always `fork/trunk`, never `origin/trunk`.** PRs in this workflow land on `dognose24/jetpack`'s `trunk` (the `fork` remote), not `Automattic/jetpack`'s `trunk` (the `origin` remote). The fork lags upstream by many commits and carries fork-only harness infrastructure (`tools/ai-sandbox/**`, `.agents/skills/**`, `.claude/commands/**`, `tools/ai-sandbox/wp-verify/**`, etc.). Rebasing onto `origin/trunk` would treat those files as "deleted by us" and silently drop them on `git rebase --continue` — a force-push from there destroys the harness on the PR's branch. Always use `fork/trunk`.
 
 ```bash
+# Pre-flight: confirm a `fork` git remote is configured. The skill hardcodes the
+# remote name; a checkout missing it would silently fall back to `origin` or
+# fail mid-rebase. Stop early with a clear setup hint instead.
+git remote get-url fork >/dev/null 2>&1 || {
+  echo "ERROR: 'fork' git remote not configured. Set it up once with:"
+  echo "  git remote add fork git@github.com:dognose24/jetpack.git"
+  echo "  git fetch fork"
+  exit 1
+}
+
 git fetch fork trunk
 BEHIND=$(git rev-list --count HEAD..fork/trunk)
 gh pr view <PR> --repo "$REPO" --json mergeable,mergeStateStatus -q '{m:.mergeable,s:.mergeStateStatus}'
