@@ -90,15 +90,33 @@ verification passes.
 
 ## Step 5 — Execute additional Agent-verifiable DoD items
 
-Re-read the task md's `Definition of done` section. For each item in
-**Agent-verifiable** beyond the base build + UI verification (already covered by
-Steps 3–4), execute it.
+**Setup — always run, even if no DoD items apply this cycle.** Truncate any leftover
+DoD-report buffer from a previous interrupted run, so Step 8 doesn't post stale
+content. `cp /dev/null` is a portable single-command truncate using `cp` (already in
+the skill's allow-list):
 
-Common pattern: **local-only regression injection** — the task spec defines a
-deliberate edit that should make a specific spec fail, then asks for revert. The
-injection commonly targets the same file the implementation already changed (e.g.
-swapping a mock-data label in `stage.tsx`), so a naive `git checkout -- <file>`
-would discard the implementation along with the injection.
+```bash
+cp /dev/null /tmp/dod-report.md
+```
+
+This setup runs unconditionally, before the skip decision below — so even when this
+cycle has no Agent-verifiable items beyond build + UI verification, the buffer is
+guaranteed empty and Step 8's non-empty check stays silent.
+
+Re-read the task md's `Definition of done` section. If there are no Agent-verifiable
+items beyond the base build + UI verification (already covered by Steps 3–4), skip
+the rest of this step.
+
+For each remaining Agent-verifiable item, execute it (per the common pattern below
+or task-specific instructions) **and then record the outcome** (required for every
+item — see the Record outcome section after the pattern).
+
+### Common pattern: local-only regression injection
+
+The task spec defines a deliberate edit that should make a specific spec fail, then
+asks for revert. The injection commonly targets the same file the implementation
+already changed (e.g. swapping a mock-data label in `stage.tsx`), so a naive
+`git checkout -- <file>` would discard the implementation along with the injection.
 
 Use the git index as a baseline snapshot: stage the implementation first so the
 revert is targeted to the injection only.
@@ -121,8 +139,32 @@ If the expected failure does not occur, treat the task as failed and stop —
 the verification mechanism is not catching what the spec claims it catches.
 Report the discrepancy and do not proceed to commit until the cause is understood.
 
-Skip this step only if the task md's DoD has no Agent-verifiable items beyond the
-base build + UI verification.
+### Record outcome — required for every Agent-verifiable item
+
+This applies to **every** Agent-verifiable DoD item executed in Step 5, not only
+the regression-injection pattern. After verifying the item, append a structured
+block to `/tmp/dod-report.md` so Step 8 can post it as durable evidence:
+
+```bash
+cat >> /tmp/dod-report.md << 'EOF'
+- **<one-line DoD item title from the task md>**: PASS
+  - <one or more lines describing how the item was verified — fields vary by item>
+EOF
+```
+
+For the regression-injection pattern specifically, fill in:
+- Edit applied: `<e.g. 'Desktop' → 'Workstation' in routes/dashboard/stage.tsx>`
+- Expected failing spec: `<spec-path:line and the assertion that should fail>`
+- Actual failure: `<yes — paste the runner's failure-message excerpt>`
+- Other specs: `<green throughout / which changed>`
+- Revert + re-run: `<playwright summary, e.g. 4 passed (0 skipped)>`
+
+For other Agent-verifiable items (deterministic CLI output, specific feature
+behavior assertion, etc.), record the equivalent: what was checked, what the
+expected outcome was, what was observed.
+
+Do not commit `/tmp/dod-report.md` — `/tmp/` is outside the repo so this is
+automatic.
 
 ## Step 6 — Changelog
 
@@ -136,12 +178,14 @@ pnpm jetpack changelogger add packages/premium-analytics \
 
 ## Step 7 — Commit
 
-The implementation is already staged from Step 5 (or, if Step 5 was skipped, stage
-the scope-allowed implementation files now). Stage the changelog entry added in
-Step 6 and commit.
+Stage every scope-allowed file unconditionally — `git add` is idempotent, so files
+already staged from Step 5's regression-injection pattern stay staged, and files
+left unstaged by a non-regression DoD path (or by skipping Step 5 entirely) are
+picked up. Then stage the changelog from Step 6 and commit:
 
 ```bash
-git status                       # confirm no unstaged injection remains; verify staged set matches Scope + changelog
+git status                       # confirm no unstaged injection remains; verify the working tree matches Scope + changelog
+git add <implementation-files>   # idempotent: stage anything in Scope not already in the index
 git add <changelog-path>         # stage the changelog entry from Step 6
 git commit -m "<conventional commit message>"
 ```
@@ -173,6 +217,35 @@ Fill or update the Agent Session Report section in the PR body:
 - Human rework needed: none / minor / major
 ```
 
+If Step 5 recorded any DoD outcomes (i.e. `/tmp/dod-report.md` is non-empty — the
+setup in Step 5 truncates the file unconditionally, so a non-empty buffer is the
+real signal that Step 5 ran items, distinct from "Step 5 was skipped this cycle"),
+post them as a PR comment so reviewers can verify what was actually executed. The
+post-revert filesystem state is identical whether Step 5 ran clean or was skipped,
+so durable evidence is the only way to tell from the PR alone:
+
+```bash
+if [ -s /tmp/dod-report.md ]; then
+  PR_NUM=$(gh pr view --json number -q .number)
+  if {
+    echo "## DoD verification"
+    echo ""
+    cat /tmp/dod-report.md
+  } | gh pr comment "$PR_NUM" --body-file -; then
+    # Only truncate after a successful post. `cp` is allow-list-friendly (no `rm` needed).
+    cp /dev/null /tmp/dod-report.md
+  else
+    echo "ERROR: failed to post DoD verification comment for PR #$PR_NUM. Buffer preserved at /tmp/dod-report.md — retry the post or treat the task as failed per HARD rules; do not proceed to Step 9." >&2
+    exit 1
+  fi
+fi
+```
+
+The truncate is gated on `gh pr comment` succeeding. If posting fails (auth /
+network / PR doesn't exist / etc.), the buffer survives and the script exits
+non-zero — required because the HARD rule below treats a missing `## DoD
+verification` comment when Step 5 was in scope as task failure.
+
 ## Step 9 — Review cycle
 
 `.github/workflows/pr-review-cycle.yml` fires on `pull_request: [opened, ready_for_review]`
@@ -203,3 +276,4 @@ interruption.
 - Never edit files in `build/`.
 - Never merge or close the PR — that is always the human's call.
 - If any step fails, stop and report the error. Do not skip steps.
+- If Step 5 ran (task md DoD has Agent-verifiable items beyond build + UI verification), the PR **must** contain a `## DoD verification` comment posted in Step 8. The post-revert filesystem state is identical whether Step 5 ran clean or was silently skipped, so this comment is the only durable evidence the verification mechanism actually fired. Missing comment when Step 5 was in scope = treat the task as failed.
