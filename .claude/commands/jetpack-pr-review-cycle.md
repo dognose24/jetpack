@@ -103,8 +103,9 @@ Keeping the PR rebased on fresh trunk is a **requirement**, not just a conflict-
 
 ```bash
 # Pre-flight: confirm a `fork` git remote is configured. The skill hardcodes the
-# remote name; a checkout missing it would silently fall back to `origin` or
-# fail mid-rebase. Stop early with a clear setup hint instead.
+# remote name; without it `git fetch fork trunk` would fail with a bare
+# `fatal: 'fork' does not appear to be a git repository` deep in step (e).
+# Stop here with a clear setup hint instead.
 git remote get-url fork >/dev/null 2>&1 || {
   echo "ERROR: 'fork' git remote not configured. Set it up once with:"
   echo "  git remote add fork git@github.com:dognose24/jetpack.git"
