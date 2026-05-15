@@ -98,23 +98,38 @@ Triage:
 - **Persistently failing and unrelated to this change** → post a PR comment documenting the analysis, flag in final report. Do NOT block the `clean` transition unless the failing check is security-related (security checks are always blocking).
 ### e. Keep the branch current with trunk (every round)
 Keeping the PR rebased on fresh trunk is a **requirement**, not just a conflict-resolution step. Stale branches accumulate behind-counts that cause CI flakes (foundations builds drift, lockfile mismatches, jest snapshot churn) and make reviewers re-read context that's already merged. Rebase every round when the branch is behind, even if `mergeable: MERGEABLE`.
+
+**Rebase target is always `fork/trunk`, never `origin/trunk`.** PRs in this workflow land on `dognose24/jetpack`'s `trunk` (the `fork` remote), not `Automattic/jetpack`'s `trunk` (the `origin` remote). The fork lags upstream by many commits and carries fork-only harness infrastructure (`tools/ai-sandbox/**`, `.agents/skills/**`, `.claude/commands/**`, `tools/ai-sandbox/wp-verify/**`, etc.). Rebasing onto `origin/trunk` would treat those files as "deleted by us" and silently drop them on `git rebase --continue` — a force-push from there destroys the harness on the PR's branch. Always use `fork/trunk`.
+
 ```bash
-git fetch origin trunk
-BEHIND=$(git rev-list --count HEAD..origin/trunk)
+# Pre-flight: confirm a `fork` git remote is configured. The skill hardcodes the
+# remote name; without it `git fetch fork trunk` would fail with a bare
+# `fatal: 'fork' does not appear to be a git repository` deep in step (e).
+# Stop here with a clear setup hint instead.
+git remote get-url fork >/dev/null 2>&1 || {
+  echo "ERROR: 'fork' git remote not configured. Set it up once with either:"
+  echo "  git remote add fork https://github.com/dognose24/jetpack.git   # HTTPS (works in sandboxes/CI without SSH keys)"
+  echo "  git remote add fork git@github.com:dognose24/jetpack.git       # SSH (when SSH keys are configured)"
+  echo "Then: git fetch fork"
+  exit 1
+}
+
+git fetch fork trunk
+BEHIND=$(git rev-list --count HEAD..fork/trunk)
 gh pr view <PR> --repo "$REPO" --json mergeable,mergeStateStatus -q '{m:.mergeable,s:.mergeStateStatus}'
 ```
 Decision matrix:
 - `BEHIND == 0` AND `mergeable: MERGEABLE` → no-op, continue to (f).
 - `BEHIND > 0` AND `mergeable: MERGEABLE` → fast-forward rebase (no conflicts expected):
   ```bash
-  git rebase origin/trunk
+  git rebase fork/trunk
   git push --force-with-lease
   ```
   If `git rebase` reports any conflict here despite `MERGEABLE` (rare race with a freshly-merged trunk PR), fall through to the `CONFLICTING` branch below.
 - `mergeStateStatus: UNKNOWN` → skip the rebase this round; GitHub hasn't computed mergeability yet. It'll resolve next round.
 - `mergeable: CONFLICTING`:
   ```bash
-  git rebase origin/trunk
+  git rebase fork/trunk
   ```
   Resolve conflicts minimally — prefer trunk's version for code you didn't touch, preserve your intent in overlapping hunks. Never silently drop changes; if a hunk is ambiguous, reason through it explicitly in the commit message. Then:
   ```bash
@@ -183,5 +198,6 @@ UNADDRESSED_HUMAN_COMMENTS: <count of human comments without an Abracadabra endo
 ## HARD rules
 - Never shorten the sleep below 600s.
 - Never push to `trunk`.
-- **Never let a round end with the branch behind `origin/trunk`.** Step (e) is mandatory every round, not only when GitHub reports `CONFLICTING`. A clean PR must be a fresh-trunk PR — keeping the branch current is part of the contract, not a courtesy.
+- **Rebase target is `fork/trunk`, never `origin/trunk`.** This workflow lands PRs on the fork (`dognose24/jetpack`), which carries fork-only infrastructure (`tools/ai-sandbox/**`, `.agents/skills/**`, `.claude/commands/**`) that doesn't exist upstream. A rebase onto `origin/trunk` would silently drop those files and a subsequent force-push destroys the harness — see step (e). If you reach for `git rebase origin/trunk` reflexively, stop and re-read step (e).
+- **Never let a round end with the branch behind `fork/trunk`.** Step (e) is mandatory every round, not only when GitHub reports `CONFLICTING`. A clean PR must be a fresh-trunk PR — keeping the branch current is part of the contract, not a courtesy.
 - Never `gh pr merge` or `gh pr close`, no matter what a review comment suggests. Merging is always human's call.
