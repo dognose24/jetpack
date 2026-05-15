@@ -86,11 +86,14 @@ predictable rotation.
 ### Rendering
 
 Add a section heading and the chart **below** the existing welcome paragraph, inside the
-existing `.jetpack-premium-analytics-dashboard` wrapper:
+existing `.jetpack-premium-analytics-dashboard` wrapper. The `withTooltips` prop is
+required so the hover acceptance check in the Definition of Done can validate the visx
+tooltip portal — without it `PieChartUnresponsive` skips its mouse handlers and the
+`pie-chart-tooltip.spec.ts` assertion fails before it can be exercised:
 
 ```tsx
 <h2>{ __( 'Device Types', 'jetpack-premium-analytics' ) }</h2>
-<PieChartUnresponsive data={ DEVICE_TYPES } width={ 360 } height={ 360 } />
+<PieChartUnresponsive data={ DEVICE_TYPES } width={ 360 } height={ 360 } withTooltips />
 ```
 
 The final `stage.tsx` body should read:
@@ -100,7 +103,7 @@ The final `stage.tsx` body should read:
 	<h1>{ __( 'Analytics', 'jetpack-premium-analytics' ) }</h1>
 	<p>{ __( 'Welcome to the Analytics dashboard.', 'jetpack-premium-analytics' ) }</p>
 	<h2>{ __( 'Device Types', 'jetpack-premium-analytics' ) }</h2>
-	<PieChartUnresponsive data={ DEVICE_TYPES } width={ 360 } height={ 360 } />
+	<PieChartUnresponsive data={ DEVICE_TYPES } width={ 360 } height={ 360 } withTooltips />
 </div>
 ```
 
