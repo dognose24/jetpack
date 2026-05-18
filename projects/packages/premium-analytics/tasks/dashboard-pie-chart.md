@@ -54,8 +54,9 @@ remove any other fields):
 Add the two new import statements shown below. Leave the existing
 `import { __ } from '@wordpress/i18n';` line unchanged — do not re-add it. The
 inline `eslint-disable-line` comment on the CSS import line is required — see
-"Why the CSS import" below for the rationale, and "Why the disable comment must
-be inline" for why it lives at the end of the line and not on the line above.
+"Why the CSS import is required" below for the rationale, and "Why the disable
+comment must be inline" for why it lives at the end of the line and not on the
+line above.
 
 ```ts
 // Insert these two statements above the existing @wordpress/i18n import:
