@@ -53,7 +53,10 @@ remove any other fields):
 
 Add the two new import statements shown below. Leave the existing
 `import { __ } from '@wordpress/i18n';` line unchanged — do not re-add it. The
-`eslint-disable-next-line` comment is required — see "Why the CSS import" below.
+inline `eslint-disable-line` comment on the CSS import line is required — see
+"Why the CSS import is required" below for the rationale, and "Why the disable
+comment must be inline" for why it lives at the end of the line and not on the
+line above.
 
 ```ts
 // Insert these two statements above the existing @wordpress/i18n import:
@@ -61,8 +64,7 @@ import {
 	PieChartUnresponsive,
 	type DataPointPercentage,
 } from '@automattic/charts';
-// eslint-disable-next-line import/no-unresolved -- CSS subpath export; dist/index.css is gitignored and not built in the ESLint CI step
-import '@automattic/charts/style.css';
+import '@automattic/charts/style.css'; // eslint-disable-line import/no-unresolved -- CSS subpath export; dist/index.css is gitignored and not built in the ESLint CI step
 ```
 
 ### Mock data
@@ -134,11 +136,21 @@ descender space from causing that internal measurement to drift upward on each c
 auto-inject styles. Without it the rule is never applied and the chart height grows
 indefinitely.
 
-The `eslint-disable-next-line import/no-unresolved` comment is required because
+The inline `eslint-disable-line import/no-unresolved` comment is required because
 `@automattic/charts/style.css` is a subpath export that resolves to `dist/index.css`,
 which is gitignored and the ESLint CI step does not run the charts package build, so the
 resolver cannot find the file at lint time. Leave the comment in place; do not edit its
 text or remove it.
+
+## Why the disable comment must be inline
+
+Use `eslint-disable-line` on the same line as the import — **not** `eslint-disable-next-line` on the line above. Repeated runs of this task have shown the `next-line` form doesn't survive the pre-commit lint pipeline reliably:
+
+* The pre-commit `pnpm run lint-file --fix` step reorders / reformats imports (ESLint `import/order` enforces `'newlines-between': 'never'` + alphabetic ordering per `tools/js-tools/eslintrc/base.mjs:318-325`).
+* During that pass, the standalone `eslint-disable-next-line` comment ends up missing from the file the agent then commits — observed in multiple sandbox runs of this task. We have not fully reverse-engineered which rule or fix interaction drops it; the relevant signal is the outcome, not the mechanism.
+* On CI the lint job runs without the charts package built, so `import/no-unresolved` fires on the CSS import — but the disable comment is gone, and CI fails.
+
+The inline `eslint-disable-line` form sidesteps the question entirely: trailing comments don't move during import reordering, and the comment's target rule (`import/no-unresolved`) does fire in CI where the file is genuinely unresolved, so the comment stays as a load-bearing annotation rather than an orphaned one.
 
 ## Constraints
 
