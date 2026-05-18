@@ -144,13 +144,13 @@ text or remove it.
 
 ## Why the disable comment must be inline
 
-Use `eslint-disable-line` on the same line as the import — **not** `eslint-disable-next-line` on the line above. The next-line form looks cleaner but doesn't survive this repo's lint/format toolchain end-to-end:
+Use `eslint-disable-line` on the same line as the import — **not** `eslint-disable-next-line` on the line above. Repeated runs of this task have shown the `next-line` form doesn't survive the pre-commit lint pipeline reliably:
 
-* The pre-commit pipeline reorders imports via ESLint `import/order` (`'newlines-between': 'never'`, alphabetic). A standalone `eslint-disable-next-line` comment placed between imports can end up detached from the import it was meant to annotate after the pipeline runs.
-* Once the comment is no longer immediately above the unresolved import, ESLint's `--fix` sees the comment as "unused" — locally the `@automattic/charts/dist/index.css` file exists (charts package is built), so the `import/no-unresolved` rule doesn't fire there, and the disable comment gets removed.
-* On CI the lint job runs without the charts package built. The import is unresolved, but the disable comment was already deleted locally in the previous step and committed away — so CI lint fails.
+* The pre-commit `pnpm run lint-file --fix` step reorders / reformats imports (ESLint `import/order` enforces `'newlines-between': 'never'` + alphabetic ordering per `tools/js-tools/eslintrc/base.mjs:318-325`).
+* During that pass, the standalone `eslint-disable-next-line` comment ends up missing from the file the agent then commits — observed in multiple sandbox runs of this task. We have not fully reverse-engineered which rule or fix interaction drops it; the relevant signal is the outcome, not the mechanism.
+* On CI the lint job runs without the charts package built, so `import/no-unresolved` fires on the CSS import — but the disable comment is gone, and CI fails.
 
-The inline `eslint-disable-line` form has none of these failure modes: trailing comments don't move during import reordering, and ESLint won't auto-remove a comment whose target rule actually fires (in CI where the file is genuinely unresolved).
+The inline `eslint-disable-line` form sidesteps the question entirely: trailing comments don't move during import reordering, and the comment's target rule (`import/no-unresolved`) does fire in CI where the file is genuinely unresolved, so the comment stays as a load-bearing annotation rather than an orphaned one.
 
 ## Constraints
 
