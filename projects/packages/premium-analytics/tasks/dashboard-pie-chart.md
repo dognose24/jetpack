@@ -149,7 +149,7 @@ Use `eslint-disable-line` on the same line as the import — **not** `eslint-dis
 * Locally the charts package is usually built, so `dist/index.css` exists and ESLint's auto-fix sees the disable comment as "unused" and removes it.
 * CI's lint job runs without the charts package built, so the import is unresolved — but the disable comment was already deleted locally and committed away, so CI fails.
 
-The inline `disable-line` form has none of these failure modes: prettier doesn't move trailing comments, and ESLint won't auto-remove it because the rule it disables actually fires (in the CI environment where the file is unresolved).
+The inline `eslint-disable-line` form has none of these failure modes: prettier doesn't move trailing comments, and ESLint won't auto-remove it because the rule it disables actually fires (in the CI environment where the file is unresolved).
 
 ## Constraints
 
