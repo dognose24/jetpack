@@ -87,8 +87,8 @@ NODE_PATH=$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/pla
 
 `NODE_PATH=$(npm root -g)` is required because the sandbox image installs
 `@playwright/test` globally; without it, the config file's
-`import { defineConfig } from '@playwright/test'` (line 17 of
-`tools/ai-sandbox/wp-verify/playwright.config.ts`) fails to resolve, since
+`import { defineConfig } from '@playwright/test'` in
+`tools/ai-sandbox/wp-verify/playwright.config.ts` fails to resolve, since
 standard Node module resolution from that file doesn't reach the global path.
 
 The suite lives under `tools/ai-sandbox/wp-verify/tests/`:
