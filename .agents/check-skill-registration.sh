@@ -16,13 +16,25 @@
 # Exit codes:
 #   0  — every in-scope skill has a stub
 #   1  — one or more skills are missing their stubs (the count + names are printed)
+#   2  — tool error (could not resolve repo root from script location)
 
 set -euo pipefail
 
 # Derive repo root from this script's location (consistent with the
-# BASH_SOURCE/dirname pattern in tools/*.sh). Works without a git checkout
-# and self-relocates if the script moves.
+# BASH_SOURCE/dirname pattern in tools/*.sh).
+#
+# Then validate explicitly: command-substitution failures don't trigger
+# set -e, so if the `cd` inside $(...) fails (script moved, broken symlink,
+# unusual BASH_SOURCE value, …) BASE would silently become empty and
+# `cd "$BASE"` would land in $HOME — the nullglob loop would then print
+# "OK" without checking anything. Probe for two expected repo subtrees as
+# a cheap structural sanity check.
 BASE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+if [ -z "$BASE" ] || [ ! -d "$BASE/.agents/skills" ] || [ ! -d "$BASE/.claude/commands" ]; then
+	echo "Error: could not resolve repo root from script location (BASE='$BASE')." >&2
+	echo "Expected \$BASE/.agents/skills and \$BASE/.claude/commands to exist." >&2
+	exit 2
+fi
 cd "$BASE"
 
 missing=0
