@@ -8,7 +8,7 @@ description: >
   Must run inside jetpack-ai-sandbox (Docker socket required for the build + verify
   loop).
 argument-hint: <task-md-path>
-allowed-tools: Bash(docker:*), Bash(pnpm:*), Bash(playwright:*), Bash(test:*), Bash(cat:*), Bash(cp:*), Bash(git add:*), Bash(git checkout:*), Bash(git diff:*), Bash(git status:*), Read
+allowed-tools: Bash(docker:*), Bash(npm:*), Bash(pnpm:*), Bash(playwright:*), Bash(test:*), Bash(cat:*), Bash(cp:*), Bash(git add:*), Bash(git checkout:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git status:*), Read
 ---
 
 # regression-injection
@@ -38,7 +38,8 @@ The Scope section names the implementation files (used as the baseline-staging s
 test -f /.dockerenv || { echo "Run this skill inside jetpack-ai-sandbox" >&2; exit 1; }
 docker info > /dev/null 2>&1 || {
   echo "Docker socket not available — the sandbox container needs /var/run/docker.sock mounted." >&2
-  echo "Enter the sandbox via 'bash tools/ai-sandbox/wp-verify.sh up', which uses the compose setup that mounts the socket." >&2
+  echo "Exit this container and run 'bash tools/ai-sandbox/wp-verify.sh up' from the host." >&2
+  echo "(Re-running wp-verify.sh up from inside a container does not recreate jetpack-ai-sandbox; only a host-side invocation can attach the socket volume.)" >&2
   exit 1
 }
 
@@ -107,8 +108,9 @@ and the human needs to redesign the injection.
 
 Pass every injected path to `git checkout --` so the working tree is fully reset
 from the index — Step 2 may have edited more than one file. Re-anchor cwd here
-defensively in case an earlier diagnostic `cd`'d into a subdirectory; relative
-paths to `git checkout` would silently fail with `pathspec did not match`.
+defensively in case an earlier diagnostic `cd`'d into a subdirectory; otherwise
+the relative paths fail loud with `pathspec '<path>' did not match any file(s)
+known to git` (exit 1) and require a retry from the correct directory.
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
