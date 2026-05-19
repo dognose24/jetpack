@@ -41,6 +41,10 @@ docker info > /dev/null 2>&1 || {
   echo "Enter the sandbox via 'bash tools/ai-sandbox/wp-verify.sh up', which uses the compose setup that mounts the socket." >&2
   exit 1
 }
+
+# Anchor cwd at the repo root so later git/pnpm/playwright commands work
+# regardless of where the caller (or earlier diagnostic) left the shell.
+cd "$(git rev-parse --show-toplevel)"
 ```
 
 The caller (usually `/premium-analytics-implement-task` Step 4) is expected to have
@@ -76,8 +80,13 @@ git diff --cached --name-only   # the implementation files
 
 ```bash
 CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build
-playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts
+NODE_PATH=$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts
 ```
+
+`NODE_PATH=$(npm root -g)` is required because the sandbox image installs
+`@playwright/test` globally; without it, the config file's `require('@playwright/test')`
+fails with `MODULE_NOT_FOUND` since standard Node resolution from
+`tools/ai-sandbox/wp-verify/playwright.config.ts` doesn't reach the global path.
 
 Capture the runner's output — Step 6 needs the failure-message excerpt.
 
@@ -97,12 +106,15 @@ and the human needs to redesign the injection.
 ## Step 5 — Revert + reconfirm green
 
 Pass every injected path to `git checkout --` so the working tree is fully reset
-from the index — Step 2 may have edited more than one file:
+from the index — Step 2 may have edited more than one file. Re-anchor cwd here
+defensively in case an earlier diagnostic `cd`'d into a subdirectory; relative
+paths to `git checkout` would silently fail with `pathspec did not match`.
 
 ```bash
+cd "$(git rev-parse --show-toplevel)"
 git checkout -- <injected-file>...   # one or more paths; restores from index, drops only the unstaged injection
 CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build
-playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts
+NODE_PATH=$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts
 ```
 
 The suite must be green again. If not — stop. The index baseline was contaminated
@@ -133,6 +145,9 @@ and posts it as the `## DoD verification` PR comment. Do not commit
   the human needs to know the spec graph isn't as isolated as the task md claimed.
 - Suite not green in Step 5 → stop. Do not commit. The baseline was contaminated.
 - Never extend the injection outside the task's Scope section.
+- Do not `cd` to subdirectories during the skill. Pre-flight anchors cwd at the
+  repo root; if a diagnostic must inspect a subdir, use absolute paths or `ls
+  /full/path` instead of `cd`. Subsequent steps assume cwd = repo root.
 - The caller is responsible for invoking `cp /dev/null /tmp/dod-report.md` at the
   start of its own flow (so a previous interrupted run's buffer doesn't leak into
   this run). This skill only appends.
