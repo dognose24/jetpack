@@ -15,7 +15,7 @@
 #
 # Exit codes:
 #   0  — every in-scope skill has a stub
-#   N  — N skills are missing their stubs (also printed by name)
+#   1  — one or more skills are missing their stubs (the count + names are printed)
 
 set -euo pipefail
 
@@ -36,11 +36,11 @@ shopt -u nullglob
 
 if [ "$missing" -eq 0 ]; then
 	echo "OK: all premium-analytics skills have command stubs."
-else
-	echo ""
-	echo "Found $missing skill(s) without a slash-command stub."
-	echo "Each .agents/skills/premium-analytics-*.md must have a matching"
-	echo ".claude/commands/<name>.md — see .agents/SKILL-NAMING.md."
+	exit 0
 fi
 
-exit "$missing"
+echo ""
+echo "Found $missing skill(s) without a slash-command stub."
+echo "Each .agents/skills/premium-analytics-*.md must have a matching"
+echo ".claude/commands/<name>.md — see .agents/SKILL-NAMING.md."
+exit 1

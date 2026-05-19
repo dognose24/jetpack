@@ -11,17 +11,14 @@ slash commands.
 <scope>-<verb>[-<object>]
 ```
 
-- **scope** — package or topic. Examples: `jetpack`, `premium-analytics`,
-  `wp-abilities`. Use the package directory name when the skill is bound to a
-  package.
-- **verb** — what the skill does. Examples: `implement`, `verify`, `review`,
-  `prototype`, `audit`, `build`.
-- **object** — optional, when the verb needs disambiguation. Examples:
+- **scope** — package name, topic, or the repo. Examples in tree: `jetpack`,
+  `premium-analytics`, `wp-abilities`, `charts`. Use the package directory name
+  when the skill is bound to a package.
+- **verb** — what the skill does. Examples in tree: `verify`, `review`, `audit`,
+  `screenshot`. Other reasonable verbs: `implement`, `prototype`, `build`.
+- **object** — optional, when the verb needs disambiguation. Examples in tree:
   `wp-abilities-verify` (verb only, object implied by scope),
   `premium-analytics-implement-task` (verb + object).
-
-Generic, cross-package skills omit the scope: `regression-injection`,
-`jetpack-changelog` (here `jetpack` is the brand/repo, not a package scope).
 
 Use kebab-case. The file name is `<full-name>.md`.
 
