@@ -2,7 +2,8 @@
 description: >
   Implement a premium-analytics task end-to-end: read the task md, create a branch from
   fork/trunk, implement, build, run UI verification, add a changelog entry, push, open a PR,
-  and start the review cycle. Run inside jetpack-ai-sandbox (Docker socket required).
+  start the review cycle, and audit for new invariants worth capturing into package docs.
+  Run inside jetpack-ai-sandbox (Docker socket required).
 allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:p), Bash(cat:*), Bash(cp:*), Bash(tr:*), Bash(sed:*), Bash(grep:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git fetch:*), Bash(git checkout:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(git push:*), Bash(git remote:*), Bash(git rm:*), Bash(git log:*), Bash(git status:*), Bash(gh pr create:*), Bash(gh pr view:*), Bash(gh pr comment:*), Bash(gh pr edit:*), Bash(gh api:*), Bash(mktemp:*), Write, Read
 ---
 
@@ -233,6 +234,61 @@ changed files.
 Keep the sandbox session alive (tmux recommended) so all rounds complete without
 interruption.
 
+## Step 10 — Invariant capture audit
+
+Run after the review cycle has settled. Ask one self-audit question while the
+agent's context is still warm with what surprised it during implementation and
+review:
+
+> Did this task surface anything the next agent doing similar work would want
+> to know up front?
+
+Concrete "yes" triggers (from past milestone tasks):
+
+- A required prop / option that wasn't obvious from the type signature
+  (e.g. `withTooltips` for hover acceptance tests — surfaced via PR #36 review)
+- A workaround for a specific bug or lint interaction
+  (e.g. inline `eslint-disable-line` surviving the pre-commit pipeline where
+  the `next-line` form does not — also surfaced via PR #36 review)
+- A load-bearing step in build / boot that future agents could mistakenly
+  remove
+  (e.g. the shim copy step in `build/modules/boot/index.min.asset.php`,
+  already in `AGENTS.md` from the original codebase)
+
+If the answer is **no** — most tasks — exit cleanly. Do not open an empty PR.
+
+If the answer is **yes**, open a small follow-up PR that touches **only**
+docs/contract files. Pick the destination based on the invariant's generality:
+
+- `projects/packages/premium-analytics/AGENTS.md` — package-wide invariants
+  (Phase 1/2 boundaries, "the shim copy step is load-bearing", etc.)
+- `projects/packages/premium-analytics/docs/` — narrower or research-output
+  content (a framework gotcha tied to a specific dep version, a 4-round
+  review's findings on a single annotation, etc.)
+
+Never bundle the invariant capture into the implementation PR — that PR is
+already under review, and mixing in doc changes inflates scope and slows merge.
+This is a separate PR.
+
+```bash
+# Anchor cwd and branch off the current trunk (not the implementation PR's
+# branch — invariants should land on trunk independently of the implementation).
+cd "$(git rev-parse --show-toplevel)"
+git fetch fork
+git checkout -b "docs/<invariant-topic>" fork/trunk
+# Edit AGENTS.md / docs/ as needed, then:
+pnpm jetpack changelogger add packages/premium-analytics \
+  --significance=patch --type=changed \
+  --entry="Docs: capture <invariant> learned during <RSM-XXXX> implementation."
+git add <docs-files> changelog/
+git commit -m "docs(premium-analytics): capture <invariant> from <RSM-XXXX>"
+git push fork "docs/<invariant-topic>"
+/jetpack-pr
+```
+
+Reference the originating implementation PR in the docs PR description so the
+audit trail links both directions.
+
 ## HARD rules
 
 - Never touch files outside the task's Scope section.
@@ -241,3 +297,4 @@ interruption.
 - Never merge or close the PR — that is always the human's call.
 - If any step fails, stop and report the error. Do not skip steps.
 - If Step 5 ran (task md DoD has Agent-verifiable items beyond build + UI verification), the PR **must** contain a `## DoD verification` comment posted in Step 8. The post-revert filesystem state is identical whether Step 5 ran clean or was silently skipped, so this comment is the only durable evidence the verification mechanism actually fired. Missing comment when Step 5 was in scope = treat the task as failed.
+- Step 10's invariant capture, when it produces output, is always a separate docs-only PR off `fork/trunk` — never bundled into the implementation PR or pushed onto the implementation branch. Bundling inflates the implementation PR's scope and slows merge.
