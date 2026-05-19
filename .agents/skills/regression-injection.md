@@ -35,8 +35,12 @@ The Scope section names the implementation files (used as the baseline-staging s
 ## Pre-flight
 
 ```bash
-test -f /.dockerenv || { echo "Run this skill inside jetpack-ai-sandbox"; exit 1; }
-docker info > /dev/null 2>&1 || { echo "Docker socket not available — run wp-verify.sh up first"; exit 1; }
+test -f /.dockerenv || { echo "Run this skill inside jetpack-ai-sandbox" >&2; exit 1; }
+docker info > /dev/null 2>&1 || {
+  echo "Docker socket not available — the sandbox container needs /var/run/docker.sock mounted." >&2
+  echo "Enter the sandbox via 'bash tools/ai-sandbox/wp-verify.sh up', which uses the compose setup that mounts the socket." >&2
+  exit 1
+}
 ```
 
 The caller (usually `/premium-analytics-implement-task` Step 4) is expected to have
@@ -92,8 +96,11 @@ and the human needs to redesign the injection.
 
 ## Step 5 — Revert + reconfirm green
 
+Pass every injected path to `git checkout --` so the working tree is fully reset
+from the index — Step 2 may have edited more than one file:
+
 ```bash
-git checkout -- <injected-file>   # restores from index, drops the injection only
+git checkout -- <injected-file>...   # one or more paths; restores from index, drops only the unstaged injection
 CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build
 playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts
 ```
