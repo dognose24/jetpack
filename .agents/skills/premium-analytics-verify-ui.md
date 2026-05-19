@@ -82,8 +82,14 @@ echo "wpcli setup complete."
 Run the Playwright Test suite against the wp-verify environment:
 
 ```bash
-playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts
+NODE_PATH=$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts
 ```
+
+`NODE_PATH=$(npm root -g)` is required because the sandbox image installs
+`@playwright/test` globally; without it, the config file's
+`import { defineConfig } from '@playwright/test'` in
+`tools/ai-sandbox/wp-verify/playwright.config.ts` fails to resolve, since
+standard Node module resolution from that file doesn't reach the global path.
 
 The suite lives under `tools/ai-sandbox/wp-verify/tests/`:
 
@@ -95,7 +101,7 @@ which Step 4 commits.
 
 Exit 0 = all specs passed (skipped counts as passed). Non-zero = the runner's terminal
 output names the failing spec(s); rerun a single failing one with
-`playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts <spec-name>`
+`NODE_PATH=$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts <spec-name>`
 to iterate.
 
 The legacy `node tools/ai-sandbox/wp-verify/check.cjs` script is **deprecated** and kept
