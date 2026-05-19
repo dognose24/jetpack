@@ -5,22 +5,26 @@ slash commands.
 
 ---
 
-## Naming convention
+## Naming guidelines
 
-```
-<scope>-<verb>[-<object>]
-```
+Recommendations, not a strict pattern — the existing tree predates this doc and
+mixes several shapes.
 
-- **scope** — package name, topic, or the repo. Examples in tree: `jetpack`,
-  `premium-analytics`, `wp-abilities`, `charts`. Use the package directory name
-  when the skill is bound to a package.
-- **verb** — what the skill does. Examples in tree: `verify`, `review`, `audit`,
-  `screenshot`. Other reasonable verbs: `implement`, `prototype`, `build`.
-- **object** — optional, when the verb needs disambiguation. Examples in tree:
-  `wp-abilities-verify` (verb only, object implied by scope),
-  `premium-analytics-implement-task` (verb + object).
-
-Use kebab-case. The file name is `<full-name>.md`.
+- **Use kebab-case.** File name is `<full-name>.md`.
+- **Lead with a recognizable scope** — package name, topic, or the repo.
+  Existing scopes in `.agents/skills/`:
+  - `jetpack-*` — repo-wide skills (`jetpack-changelog`, `jetpack-review-pr`,
+    `jetpack-screenshot`, `jetpack-blueprint-builder`, …)
+  - `premium-analytics-*` — bound to the premium-analytics package
+  - `wp-abilities-*` — bound to the WP Abilities API toolkit
+  - `charts-*`, `ship-*` — topic-scoped, no specific package binding
+- **After the scope, describe what the skill does** in 1–3 words. New skills
+  should prefer an early verb when there's a clear action
+  (`<scope>-<verb>[-<object>]`, e.g. `premium-analytics-verify-ui`), but
+  matching the shape of neighbors in an established subset is fine — current
+  tree includes verb-only (`wp-abilities-verify`), object-only
+  (`wp-abilities-api`, `charts-docs`), verb-first (`ship-wp-ability`), and
+  noun-phrase (`jetpack-blueprint-builder`) forms.
 
 ---
 

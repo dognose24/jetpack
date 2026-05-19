@@ -16,20 +16,14 @@
 # Exit codes:
 #   0  — every in-scope skill has a stub
 #   1  — one or more skills are missing their stubs (the count + names are printed)
-#   2  — tool error (not run inside a git checkout)
 
 set -euo pipefail
 
-# Derive repo root explicitly so we exit loud if run outside a git checkout.
-# `cd "$(git rev-parse --show-toplevel)"` silently moves to $HOME on failure
-# (command substitution masks the exit status from set -e), which would let the
-# script report "OK" without actually checking the repo.
-repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-if [ -z "$repo_root" ]; then
-	echo "Error: must be run from inside a git checkout (git rev-parse --show-toplevel failed)." >&2
-	exit 2
-fi
-cd "$repo_root"
+# Derive repo root from this script's location (consistent with the
+# BASH_SOURCE/dirname pattern in tools/*.sh). Works without a git checkout
+# and self-relocates if the script moves.
+BASE=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$BASE"
 
 missing=0
 
