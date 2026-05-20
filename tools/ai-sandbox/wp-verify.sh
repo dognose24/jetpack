@@ -21,6 +21,17 @@
 # the WP services (mysql/wordpress/wpcli) under the requested suffix; the
 # corresponding jetpack-ai sandbox container is not started from inside, so
 # exec'ing into it later would fail. The script blocks this case explicitly.
+#
+# Worktree mode (filesystem isolation for parallel agents): when invoked from
+# a git worktree — the typical pattern for true multi-agent parallelism on one
+# host — `wp-verify.sh` auto-detects the worktree state, computes the main
+# repo's `.git/` host path via `git rev-parse --git-common-dir`, and includes
+# `docker-compose.worktree.yml` to bind-mount it at the same absolute path
+# inside the sandbox. Without this, the worktree's `.git` file (whose content
+# is an absolute host path like `gitdir: /Users/foo/jetpack/.git/worktrees/<n>`)
+# would not resolve inside the container and every `git` call in the sandbox
+# would fail. Combined with WP_VERIFY_INSTANCE, the pair gives full
+# parallel-agent capacity: each agent in its own worktree + its own stack.
 
 set -euo pipefail
 
@@ -74,10 +85,38 @@ else
 fi
 export JETPACK_HOST_PATH
 
+# Detect worktree mode — the worktree's .git file holds an absolute host path
+# pointer to the main repo's .git/worktrees/<name>/ which the sandbox can't
+# resolve without an extra mount at the same absolute path.
+#
+# `git rev-parse --git-common-dir` returns the path of the main `.git/`:
+#   - main repo: usually ".git" (relative) or an absolute path equal to
+#     "$JETPACK_HOST_PATH/.git"
+#   - worktree:  always an absolute path to the *main* repo's .git/
+#
+# Skip detection inside the sandbox container — `git` isn't reliably on PATH
+# in every variant of the sandbox image and the worktree's .git pointer is
+# host-absolute anyway, so the host invocation is the only place this can be
+# computed correctly.
+WORKTREE_COMPOSE_OVERRIDE=()
+if [ ! -f /.dockerenv ]; then
+  GIT_COMMON_DIR_RAW=$(git -C "$JETPACK_HOST_PATH" rev-parse --git-common-dir 2>/dev/null || true)
+  if [ -n "$GIT_COMMON_DIR_RAW" ]; then
+    GIT_COMMON_DIR_HOST=$(cd "$JETPACK_HOST_PATH" && cd "$GIT_COMMON_DIR_RAW" && pwd)
+    if [ "$GIT_COMMON_DIR_HOST" != "$JETPACK_HOST_PATH/.git" ]; then
+      # Worktree — common dir lives elsewhere on the host.
+      export JETPACK_GIT_COMMON_DIR_HOST="$GIT_COMMON_DIR_HOST"
+      WORKTREE_COMPOSE_OVERRIDE=(-f "$SCRIPT_DIR/docker-compose.worktree.yml")
+      echo "Worktree detected: main .git at $GIT_COMMON_DIR_HOST will be co-mounted into the sandbox."
+    fi
+  fi
+fi
+
 COMPOSE=(
   docker compose
   -f "$SCRIPT_DIR/docker-compose.yml"
   -f "$SCRIPT_DIR/docker-compose.wp-verify.yml"
+  "${WORKTREE_COMPOSE_OVERRIDE[@]}"
   --project-directory "$SCRIPT_DIR"
   -p "$PROJECT_NAME"
 )
