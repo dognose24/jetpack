@@ -75,6 +75,15 @@ BUILD_COMMAND="CI=true pnpm --filter='@automattic/jetpack-premium-analytics' bui
 VERIFY_COMMAND="NODE_PATH=\$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts"
 ```
 
+The `\$` in `VERIFY_COMMAND`'s default is intentional — it escapes `$` so
+the `$(npm root -g)` substitution defers to the spawned `bash -o pipefail`
+subshell at execution time rather than running at default-assignment time.
+Host and sandbox `npm root -g` return different paths, so deferring keeps
+the substitution context-correct regardless of where the var got set.
+Callers passing their own `VERIFY_COMMAND` for non-wp-verify backends
+typically don't need this escape — only relevant when the substitution
+must happen in a different shell from the one that sets the variable.
+
 The wp-verify Playwright backend additionally requires a running wp-verify Docker
 stack (mysql + wordpress + wpcli reachable from `http://wordpress`). Use it from
 inside `jetpack-ai-sandbox` after `bash tools/ai-sandbox/wp-verify.sh up`.
@@ -111,6 +120,15 @@ cd "$(git rev-parse --show-toplevel)"
 # (the `:=` form) treats both states identically, so a deliberate empty
 # value like `BUILD_COMMAND=""` also falls back — callers wanting a literal
 # no-op should set `BUILD_COMMAND=":"` (the shell no-op).
+#
+# The `\$(npm root -g)` in VERIFY_COMMAND's default is intentional — the
+# backslash escapes `$` so command substitution defers to the spawned
+# `bash -o pipefail -c "$VERIFY_COMMAND"` (which runs inside the sandbox where
+# `npm root -g` returns the correct global node_modules path). Without the
+# backslash, $(npm root -g) would expand *here* at default-assignment time,
+# pinning NODE_PATH to whatever shell ran wp-verify.sh — wrong if the host
+# and sandbox npm prefixes differ (they do: host typically has a user-local
+# prefix; sandbox uses /usr/local/lib/nodejs).
 : "${BUILD_COMMAND:=CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build}"
 : "${VERIFY_COMMAND:=NODE_PATH=\$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts}"
 ```
