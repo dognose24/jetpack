@@ -184,10 +184,19 @@ case "${1:-up}" in
       "${COMPOSE[@]}" --profile wp-verify up -d mysql wordpress wpcli jetpack-ai
     fi
     echo "WordPress stack started${INSTANCE:+ (instance: $INSTANCE)}."
+    echo ""
+    echo "Host access:    http://localhost:${WP_VERIFY_HOST_PORT:-8080}/  (WordPress, published from container)"
+    echo "Sandbox access: http://wordpress  (docker-network hostname; only resolvable from inside jetpack-ai-sandbox)"
+    echo ""
     echo "Wait for wpcli setup, then run:"
     echo "  docker logs -f $WPCLI_NAME   # ready when you see: sleep infinity"
+    echo ""
+    echo "Sandbox-side verify:"
     echo "  docker exec -it $SANDBOX_NAME bash"
-    echo "  NODE_PATH=\$(npm root -g) node tools/ai-sandbox/wp-verify/check.cjs"
+    echo "  NODE_PATH=\$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts"
+    echo ""
+    echo "Host-side verify (from this terminal):"
+    echo "  WP_BASE=http://localhost:${WP_VERIFY_HOST_PORT:-8080} NODE_PATH=\$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts"
     ;;
   down)
     if [ -f /.dockerenv ]; then

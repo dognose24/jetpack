@@ -1,10 +1,12 @@
 ---
 description: >
   Start the wp-verify WordPress environment, build premium-analytics, navigate to the
-  Analytics admin page with Playwright, and assert the dashboard root mounts without uncaught
-  JS exceptions. Use after any premium-analytics UI change as the agent-verifiable step in the
-  Definition of Done. Requires the ai-sandbox with Docker socket mount and Playwright/Chromium
-  installed.
+  Analytics admin page with Playwright, and assert the dashboard root mounts without
+  uncaught JS exceptions. Use after any premium-analytics UI change as the
+  agent-verifiable step in the Definition of Done. Runs from inside `jetpack-ai-sandbox`
+  (Docker socket + Playwright/Chromium baked into the image) or from the host
+  (WordPress published to `localhost:${WP_VERIFY_HOST_PORT:-8080}`; host needs
+  Playwright on PATH).
 allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:*), Bash(cat:*), Bash(cp:*), Bash(tr:*), Bash(sed:*), Bash(grep:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(git remote:*), Bash(git rm:*), Write, Read
 ---
 
@@ -14,15 +16,19 @@ Verify that the analytics dashboard mounts correctly in wp-admin after a premium
 
 ## Pre-flight
 
-1. **Confirm Docker socket is accessible:**
+1. **Confirm Docker is reachable** (from either sandbox or host).
+   Inside the sandbox, this is the mounted socket. On the host, it's the
+   normal local Docker daemon. The wp-verify WP stack itself always runs
+   under Docker — only the *caller* invoking Playwright varies between
+   sandbox and host.
    ```bash
-   docker info > /dev/null 2>&1 || { echo "Docker socket not available — run inside jetpack-ai-sandbox"; exit 1; }
+   docker info > /dev/null 2>&1 || { echo "Docker not reachable — start Docker (host) or run inside jetpack-ai-sandbox with socket mounted"; exit 1; }
    ```
 
 2. **Confirm Playwright Test runner is installed:**
    ```bash
-   command -v playwright > /dev/null 2>&1 || { echo "playwright binary not found on PATH — rebuild sandbox image: docker compose -f tools/ai-sandbox/docker-compose.yml build jetpack-ai"; exit 1; }
-   playwright test --version > /dev/null 2>&1 || { echo "@playwright/test runner not available — rebuild sandbox image: docker compose -f tools/ai-sandbox/docker-compose.yml build jetpack-ai"; exit 1; }
+   command -v playwright > /dev/null 2>&1 || { echo "playwright binary not found on PATH — sandbox: rebuild image (docker compose -f tools/ai-sandbox/docker-compose.yml build jetpack-ai); host: install via pnpm or 'npm install -g playwright @playwright/test'"; exit 1; }
+   playwright test --version > /dev/null 2>&1 || { echo "@playwright/test runner not available — same install paths as above"; exit 1; }
    ```
 
 3. **Confirm build artifacts exist:**
@@ -79,11 +85,33 @@ echo "wpcli setup complete."
 
 ## Step 3 — Run Playwright verification
 
-Run the Playwright Test suite against the wp-verify environment:
+Run the Playwright Test suite against the wp-verify environment. The
+playwright config reads `WP_BASE` from the environment; pick the form
+that matches where this skill is invoked:
+
+**From inside `jetpack-ai-sandbox`** (default — `WP_BASE` unset, falls back to
+`http://wordpress`, the docker-network hostname):
 
 ```bash
 NODE_PATH=$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts
 ```
+
+**From the host** (the wp-verify Docker stack publishes WordPress to
+`localhost:${WP_VERIFY_HOST_PORT:-8080}` per
+`tools/ai-sandbox/docker-compose.wp-verify.yml`):
+
+```bash
+WP_BASE=http://localhost:${WP_VERIFY_HOST_PORT:-8080} \
+  NODE_PATH=$(npm root -g) \
+  playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts
+```
+
+Host-side use requires `playwright` + `@playwright/test` on PATH (the
+sandbox image installs them globally; host machines may need
+`pnpm install` / `npm install -g playwright @playwright/test`). The wp-verify
+Docker stack must still be running on the same host via
+`bash tools/ai-sandbox/wp-verify.sh up` — this skill only does verification;
+it doesn't bring the stack up or down.
 
 `NODE_PATH=$(npm root -g)` is required because the sandbox image installs
 `@playwright/test` globally; without it, the config file's
