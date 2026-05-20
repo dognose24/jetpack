@@ -16,11 +16,13 @@
 # plus `-` and `_`, starting with alphanumeric) — Docker compose project names
 # reject other characters and would otherwise surface as cryptic compose errors.
 #
-# New instances must be started from the host. Running `wp-verify.sh up` with
-# WP_VERIFY_INSTANCE set from inside an existing sandbox container starts only
-# the WP services (mysql/wordpress/wpcli) under the requested suffix; the
-# corresponding jetpack-ai sandbox container is not started from inside, so
-# exec'ing into it later would fail. The script blocks this case explicitly.
+# In-sandbox semantics: when invoked from inside a sandbox container, the
+# script reconciles WP_VERIFY_INSTANCE with the current container's own
+# instance (read from its `com.docker.compose.project` label) — it can only
+# correctly manage the stack the current container belongs to. An explicit
+# WP_VERIFY_INSTANCE that differs from the current container's value is a
+# fatal error (exit code 1). New instances must be started from the host,
+# where the script is free to start a fresh jetpack-ai sandbox container too.
 #
 # Worktree mode (filesystem isolation for parallel agents): when invoked from
 # a git worktree — the typical pattern for true multi-agent parallelism on one
@@ -32,6 +34,18 @@
 # would not resolve inside the container and every `git` call in the sandbox
 # would fail. Combined with WP_VERIFY_INSTANCE, the pair gives full
 # parallel-agent capacity: each agent in its own worktree + its own stack.
+#
+# Recommended parallel-agent pattern (manually orchestrated):
+#
+#   git worktree add ../jetpack-task-foo fork/some-branch
+#   cd ../jetpack-task-foo
+#   WP_VERIFY_INSTANCE=task-foo bash tools/ai-sandbox/wp-verify.sh up
+#   docker exec -it jetpack-ai-sandbox-task-foo bash    # work in here
+#
+# Repeat with task-bar in a second terminal. The pair (worktree + INSTANCE)
+# gives full container/network/volume/filesystem isolation. The script does
+# not create worktrees automatically — callers control where, off which
+# branch, and how to clean up.
 
 set -euo pipefail
 
@@ -39,11 +53,45 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Optional per-instance suffix for parallel runs. Empty (default) preserves
 # historical names; set to a short token (e.g. an issue ID) for isolation.
-INSTANCE="${WP_VERIFY_INSTANCE:-}"
-if [ -n "$INSTANCE" ] && ! printf '%s' "$INSTANCE" | grep -qE '^[a-z0-9][a-z0-9_-]*$'; then
-  echo "Error: WP_VERIFY_INSTANCE='$INSTANCE' is invalid." >&2
+EXPLICIT_INSTANCE="${WP_VERIFY_INSTANCE:-}"
+if [ -n "$EXPLICIT_INSTANCE" ] && ! printf '%s' "$EXPLICIT_INSTANCE" | grep -qE '^[a-z0-9][a-z0-9_-]*$'; then
+  echo "Error: WP_VERIFY_INSTANCE='$EXPLICIT_INSTANCE' is invalid." >&2
   echo "       Must match [a-z0-9][a-z0-9_-]* (lowercase alphanumeric plus '-' and '_', starting alphanumeric)." >&2
   exit 1
+fi
+
+# Reconcile the user-supplied instance with the current container's instance.
+# When invoked from inside a sandbox, the only stack this script can correctly
+# manage is the one the current container belongs to — Compose interpolation
+# does not propagate WP_VERIFY_INSTANCE into the container automatically, so
+# without this reconciliation an in-sandbox `down` from `jetpack-ai-sandbox-foo`
+# would default to managing the *unsuffixed* `ai-sandbox` project, stopping
+# the wrong stack.
+if [ -f /.dockerenv ]; then
+  CURRENT_PROJECT=$(docker inspect "$HOSTNAME" \
+    --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)
+  if [ -z "$CURRENT_PROJECT" ]; then
+    echo "Error: could not read compose project label from current container ($HOSTNAME)." >&2
+    echo "       The sandbox container must have been started via 'wp-verify.sh up' (which sets it)." >&2
+    exit 1
+  fi
+  case "$CURRENT_PROJECT" in
+    ai-sandbox)         DETECTED_INSTANCE="" ;;
+    ai-sandbox-*)       DETECTED_INSTANCE="${CURRENT_PROJECT#ai-sandbox-}" ;;
+    *)
+      echo "Error: current container's compose project '$CURRENT_PROJECT' does not look like ai-sandbox[-suffix]." >&2
+      exit 1
+      ;;
+  esac
+  if [ -n "$EXPLICIT_INSTANCE" ] && [ "$EXPLICIT_INSTANCE" != "$DETECTED_INSTANCE" ]; then
+    echo "Error: requested WP_VERIFY_INSTANCE='$EXPLICIT_INSTANCE' differs from the current container's instance '${DETECTED_INSTANCE:-<default>}'." >&2
+    echo "       From inside a sandbox container, this script can only manage that container's own stack." >&2
+    echo "       To manage a different instance, exit and re-run from the host." >&2
+    exit 1
+  fi
+  INSTANCE="$DETECTED_INSTANCE"
+else
+  INSTANCE="$EXPLICIT_INSTANCE"
 fi
 SUFFIX="${INSTANCE:+-${INSTANCE}}"
 
@@ -56,11 +104,13 @@ WPCLI_NAME="jetpack-ai-wpcli${SUFFIX}"
 
 # Compose project name — namespaces networks + named volumes per instance.
 # Default ("ai-sandbox") matches the historical name auto-derived from
-# `--project-directory "$SCRIPT_DIR"` when WP_VERIFY_INSTANCE is unset.
+# `--project-directory "$SCRIPT_DIR"` when no instance is set.
 PROJECT_NAME="ai-sandbox${SUFFIX}"
 
 # Export so docker compose can interpolate ${WP_VERIFY_INSTANCE} inside YAML.
-export WP_VERIFY_INSTANCE
+# Use the reconciled INSTANCE so YAML interpolation matches the authoritative
+# value (relevant when running from inside a sandbox without an explicit env).
+export WP_VERIFY_INSTANCE="$INSTANCE"
 
 # Detect JETPACK_HOST_PATH — the jetpack root on the HOST filesystem.
 # Docker bind mounts are resolved by the host daemon, so we must pass the host path
@@ -125,19 +175,10 @@ case "${1:-up}" in
   up)
     echo "JETPACK_HOST_PATH=$JETPACK_HOST_PATH"
     if [ -f /.dockerenv ]; then
-      # Inside sandbox: jetpack-ai is already running; only start the WP services.
-      # If WP_VERIFY_INSTANCE was set to bring up a *different* stack from inside
-      # this container, block it — we'd need to start a second jetpack-ai
-      # container, which compose won't do here (no Docker socket on jetpack-ai
-      # under the base file alone), and the suffixed sandbox wouldn't exist for
-      # the user to exec into. Direct them to invoke from the host instead.
-      CURRENT_INSTANCE=$(docker inspect "$HOSTNAME" \
-        --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)
-      if [ -n "$INSTANCE" ] && [ "$CURRENT_INSTANCE" != "$PROJECT_NAME" ]; then
-        echo "Error: requested instance '$INSTANCE' (project '$PROJECT_NAME') differs from the current container's project ('$CURRENT_INSTANCE')." >&2
-        echo "       New instances must be started from the host, not from inside another sandbox container." >&2
-        exit 1
-      fi
+      # Inside sandbox: jetpack-ai is already running (this container); only
+      # bring up the WP services. The reconciliation above guarantees INSTANCE
+      # matches the current container's instance, so the WP services land in
+      # the correct compose project.
       "${COMPOSE[@]}" --profile wp-verify up -d mysql wordpress wpcli
     else
       "${COMPOSE[@]}" --profile wp-verify up -d mysql wordpress wpcli jetpack-ai
