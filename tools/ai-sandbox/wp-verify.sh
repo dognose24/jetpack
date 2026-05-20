@@ -186,7 +186,7 @@ case "${1:-up}" in
     echo "WordPress stack started${INSTANCE:+ (instance: $INSTANCE)}."
     echo ""
     if [ -f /.dockerenv ]; then
-      # Inside the sandbox container: localhost:${WP_VERIFY_HOST_PORT} is the
+      # Inside the sandbox container: localhost:${WP_VERIFY_HOST_PORT:-8080} is the
       # container's own loopback, not the host's published port, so the
       # host-side instructions would be misleading. Only print the sandbox-
       # reachable hostname + sandbox-side invocation here.
