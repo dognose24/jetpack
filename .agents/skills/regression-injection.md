@@ -47,7 +47,8 @@ Both vars accept arbitrary shell command strings. They're invoked via
 all expand at execution time.
 
 **Reference defaults** (the historical inner-loop wp-verify backend — applied
-when the caller leaves the var unset):
+when the caller leaves the var unset *or* empty; see the `${VAR:=…}` lines in
+Pre-flight below):
 
 ```bash
 BUILD_COMMAND="CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build"
@@ -70,9 +71,13 @@ inside `jetpack-ai-sandbox` after `bash tools/ai-sandbox/wp-verify.sh up`.
   `BUILD_COMMAND=":"` (no-op)
   `VERIFY_COMMAND="npx jest projects/packages/premium-analytics/__tests__/"`
 
-Callers that need a different test runner whose binary isn't in `allowed-tools`
-must extend the skill's `allowed-tools` list (or accept Claude Code's
-permission prompt at invocation time).
+**Permission model note.** Because the skill executes both vars via
+`bash -c "$VAR"` and `allowed-tools` includes `Bash(bash:*)`, Claude Code's
+per-binary permission gate does **not** apply to the contents of the
+variables — whatever shell command the caller sets will run. The skill does
+not validate or restrict the command's contents. The caller is responsible
+for the security and correctness of the values they set; treat `BUILD_COMMAND`
+and `VERIFY_COMMAND` as fully-trusted shell input.
 
 ## Pre-flight
 
@@ -81,7 +86,11 @@ permission prompt at invocation time).
 # regardless of where the caller (or an earlier diagnostic) left the shell.
 cd "$(git rev-parse --show-toplevel)"
 
-# Fall back to wp-verify backend defaults if the caller didn't set the env vars.
+# Fall back to the wp-verify backend defaults documented in the Configuration
+# section above when the caller leaves the var unset *or* empty. `${VAR:=…}`
+# (the `:=` form) treats both states identically, so a deliberate empty
+# value like `BUILD_COMMAND=""` also falls back — callers wanting a literal
+# no-op should set `BUILD_COMMAND=":"` (the shell no-op).
 : "${BUILD_COMMAND:=CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build}"
 : "${VERIFY_COMMAND:=NODE_PATH=\$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts}"
 ```
