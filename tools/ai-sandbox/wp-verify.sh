@@ -11,6 +11,16 @@
 # matching `-<id>` suffix so two stacks do not collide. Default (env unset)
 # preserves the historical names (`jetpack-ai-sandbox`, `jetpack-ai-mysql`,
 # etc.) so existing single-stack flows are unaffected.
+#
+# WP_VERIFY_INSTANCE must match `[a-z0-9][a-z0-9_-]*` (lowercase alphanumeric
+# plus `-` and `_`, starting with alphanumeric) — Docker compose project names
+# reject other characters and would otherwise surface as cryptic compose errors.
+#
+# New instances must be started from the host. Running `wp-verify.sh up` with
+# WP_VERIFY_INSTANCE set from inside an existing sandbox container starts only
+# the WP services (mysql/wordpress/wpcli) under the requested suffix; the
+# corresponding jetpack-ai sandbox container is not started from inside, so
+# exec'ing into it later would fail. The script blocks this case explicitly.
 
 set -euo pipefail
 
@@ -19,6 +29,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Optional per-instance suffix for parallel runs. Empty (default) preserves
 # historical names; set to a short token (e.g. an issue ID) for isolation.
 INSTANCE="${WP_VERIFY_INSTANCE:-}"
+if [ -n "$INSTANCE" ] && ! printf '%s' "$INSTANCE" | grep -qE '^[a-z0-9][a-z0-9_-]*$'; then
+  echo "Error: WP_VERIFY_INSTANCE='$INSTANCE' is invalid." >&2
+  echo "       Must match [a-z0-9][a-z0-9_-]* (lowercase alphanumeric plus '-' and '_', starting alphanumeric)." >&2
+  exit 1
+fi
 SUFFIX="${INSTANCE:+-${INSTANCE}}"
 
 # Container names — kept in sync with `${WP_VERIFY_INSTANCE:+-${WP_VERIFY_INSTANCE}}`
@@ -40,11 +55,17 @@ export WP_VERIFY_INSTANCE
 # Docker bind mounts are resolved by the host daemon, so we must pass the host path
 # even when running this script from inside the sandbox container.
 if [ -f /.dockerenv ]; then
-  # Inside sandbox: ask Docker where the jetpack bind mount originates on the host.
-  JETPACK_HOST_PATH=$(docker inspect "$SANDBOX_NAME" \
+  # Inside sandbox: inspect the *current* container (via $HOSTNAME = container's
+  # short ID) rather than the suffixed name we'd build — this works regardless
+  # of whether WP_VERIFY_INSTANCE matches the current container's instance, and
+  # makes "extend WP services for the current instance" the supported in-sandbox
+  # flow. Starting a *new* (different-instance) stack from inside is blocked
+  # below; from-host invocation is the supported way to create new instances.
+  JETPACK_HOST_PATH=$(docker inspect "$HOSTNAME" \
     --format '{{range .Mounts}}{{if eq .Destination "/home/dev/jetpack"}}{{.Source}}{{end}}{{end}}' 2>/dev/null || true)
   if [ -z "$JETPACK_HOST_PATH" ]; then
-    echo "Error: could not detect host jetpack path — is the container named $SANDBOX_NAME?" >&2
+    echo "Error: could not detect host jetpack path from current container ($HOSTNAME)." >&2
+    echo "       Is /home/dev/jetpack mounted from the host?" >&2
     exit 1
   fi
 else
@@ -66,6 +87,18 @@ case "${1:-up}" in
     echo "JETPACK_HOST_PATH=$JETPACK_HOST_PATH"
     if [ -f /.dockerenv ]; then
       # Inside sandbox: jetpack-ai is already running; only start the WP services.
+      # If WP_VERIFY_INSTANCE was set to bring up a *different* stack from inside
+      # this container, block it — we'd need to start a second jetpack-ai
+      # container, which compose won't do here (no Docker socket on jetpack-ai
+      # under the base file alone), and the suffixed sandbox wouldn't exist for
+      # the user to exec into. Direct them to invoke from the host instead.
+      CURRENT_INSTANCE=$(docker inspect "$HOSTNAME" \
+        --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)
+      if [ -n "$INSTANCE" ] && [ "$CURRENT_INSTANCE" != "$PROJECT_NAME" ]; then
+        echo "Error: requested instance '$INSTANCE' (project '$PROJECT_NAME') differs from the current container's project ('$CURRENT_INSTANCE')." >&2
+        echo "       New instances must be started from the host, not from inside another sandbox container." >&2
+        exit 1
+      fi
       "${COMPOSE[@]}" --profile wp-verify up -d mysql wordpress wpcli
     else
       "${COMPOSE[@]}" --profile wp-verify up -d mysql wordpress wpcli jetpack-ai
