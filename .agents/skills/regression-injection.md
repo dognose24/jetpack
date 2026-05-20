@@ -1,12 +1,15 @@
 ---
 description: >
-  Run a local-only regression injection cycle against a caller-provided test backend —
-  stage the implementation as a baseline, apply the deliberate edit described in the
-  task md's DoD section, rebuild via $BUILD_COMMAND, run the suite via $VERIFY_COMMAND,
-  confirm the expected spec fails (and only that spec), revert via the git index, and
-  confirm the suite returns green. Append a structured outcome block to
-  /tmp/dod-report.md. The skill is environment-agnostic: any backend (wp-verify
-  Playwright, JN DOM check, host-only jsdom, …) plugs in by setting the two env vars.
+  Run a regression injection cycle against a caller-provided test backend — the
+  injection edit lives in the local git working tree only (revert via git index;
+  nothing is ever committed by the skill), but the build + verify backends themselves
+  may be local or remote. Stage the implementation as a baseline, apply the deliberate
+  edit described in the task md's DoD section, rebuild via $BUILD_COMMAND, run the
+  suite via $VERIFY_COMMAND, confirm the expected spec fails (and only that spec),
+  revert via the git index, and confirm the suite returns green. Append a structured
+  outcome block to /tmp/dod-report.md. The skill is environment-agnostic: any backend
+  (wp-verify Playwright, JN DOM check via rsync+curl, host-only jsdom, …) plugs in by
+  setting the two env vars.
 argument-hint: <task-md-path>
 allowed-tools: Bash(npm:*), Bash(pnpm:*), Bash(playwright:*), Bash(test:*), Bash(cat:*), Bash(cp:*), Bash(bash:*), Bash(git add:*), Bash(git checkout:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git status:*), Read
 ---
@@ -95,9 +98,10 @@ cd "$(git rev-parse --show-toplevel)"
 : "${VERIFY_COMMAND:=NODE_PATH=\$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts}"
 ```
 
-The caller (usually `/premium-analytics-implement-task` Step 4) is expected to have
-already built + verified the implementation, so the working tree currently matches
-the implementation. This skill does not re-run that initial verify.
+The caller (usually `/premium-analytics-implement-task` Step 5) invokes this skill
+*after* Steps 3 (build) and 4 (UI verification) have already established a green
+baseline — so the working tree currently matches the implementation. This skill does
+not re-run that initial verify.
 
 ## Step 1 — Stage implementation as baseline
 
