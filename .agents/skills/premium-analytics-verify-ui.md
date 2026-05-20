@@ -25,11 +25,21 @@ Verify that the analytics dashboard mounts correctly in wp-admin after a premium
    docker info > /dev/null 2>&1 || { echo "Docker not reachable — start Docker (host) or run inside jetpack-ai-sandbox with socket mounted"; exit 1; }
    ```
 
-2. **Confirm Playwright Test runner is installed:**
+2. **Confirm Playwright Test runner is installed globally.** The
+   documented invocation uses `command -v playwright` (needs the binary
+   on `PATH`) plus `NODE_PATH=$(npm root -g)` (npm's global
+   node_modules dir) — both assume an npm global install, not a
+   pnpm-local install (which puts binaries under `node_modules/.bin`
+   and uses a different prefix). Sandbox image ships them globally
+   already; host setups need `npm install -g`:
    ```bash
-   command -v playwright > /dev/null 2>&1 || { echo "playwright binary not found on PATH — sandbox: rebuild image (docker compose -f tools/ai-sandbox/docker-compose.yml build jetpack-ai); host: install via pnpm or 'npm install -g playwright @playwright/test'"; exit 1; }
+   command -v playwright > /dev/null 2>&1 || { echo "playwright binary not found on PATH — sandbox: rebuild image (docker compose -f tools/ai-sandbox/docker-compose.yml build jetpack-ai); host: 'npm install -g playwright @playwright/test && playwright install chromium'"; exit 1; }
    playwright test --version > /dev/null 2>&1 || { echo "@playwright/test runner not available — same install paths as above"; exit 1; }
    ```
+   (If you prefer keeping playwright as a project-local dev dep instead
+   of a global install, swap in `pnpm exec playwright test ...` for the
+   invocation. The default skill body uses the global form because the
+   sandbox image already provides it.)
 
 3. **Confirm build artifacts exist:**
    ```bash
