@@ -184,10 +184,35 @@ case "${1:-up}" in
       "${COMPOSE[@]}" --profile wp-verify up -d mysql wordpress wpcli jetpack-ai
     fi
     echo "WordPress stack started${INSTANCE:+ (instance: $INSTANCE)}."
-    echo "Wait for wpcli setup, then run:"
-    echo "  docker logs -f $WPCLI_NAME   # ready when you see: sleep infinity"
-    echo "  docker exec -it $SANDBOX_NAME bash"
-    echo "  NODE_PATH=\$(npm root -g) node tools/ai-sandbox/wp-verify/check.cjs"
+    echo ""
+    if [ -f /.dockerenv ]; then
+      # Inside the sandbox container: localhost:${WP_VERIFY_HOST_PORT:-8080} is the
+      # container's own loopback, not the host's published port, so the
+      # host-side instructions would be misleading. Only print the sandbox-
+      # reachable hostname + sandbox-side invocation here.
+      echo "Access from inside this sandbox: http://wordpress"
+      echo ""
+      echo "Wait for wpcli setup, then run:"
+      echo "  docker logs -f $WPCLI_NAME   # ready when you see: sleep infinity"
+      echo ""
+      echo "Sandbox-side verify (in this shell):"
+      echo "  NODE_PATH=\$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts"
+    else
+      # On the host: both access paths are reachable depending on where the
+      # caller runs Playwright. Print both with their respective invocations.
+      echo "Host access:    http://localhost:${WP_VERIFY_HOST_PORT:-8080}/  (WordPress, published from container)"
+      echo "Sandbox access: http://wordpress  (docker-network hostname; only resolvable from inside jetpack-ai-sandbox)"
+      echo ""
+      echo "Wait for wpcli setup, then run:"
+      echo "  docker logs -f $WPCLI_NAME   # ready when you see: sleep infinity"
+      echo ""
+      echo "Sandbox-side verify:"
+      echo "  docker exec -it $SANDBOX_NAME bash"
+      echo "  NODE_PATH=\$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts"
+      echo ""
+      echo "Host-side verify (from this terminal):"
+      echo "  WP_BASE=http://localhost:${WP_VERIFY_HOST_PORT:-8080} NODE_PATH=\$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts"
+    fi
     ;;
   down)
     if [ -f /.dockerenv ]; then
