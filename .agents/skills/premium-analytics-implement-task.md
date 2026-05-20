@@ -11,8 +11,11 @@ allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Ba
 # premium-analytics Implement Task
 
 Implement a premium-analytics task from a task md file through to an open PR with review
-cycle started. Must run inside `jetpack-ai-sandbox` (Docker socket required for UI
-verification).
+cycle started. The default verify backend (`/premium-analytics-verify-ui`) requires
+`jetpack-ai-sandbox` with the Docker socket mounted; alternative backends supplied via
+the `VERIFY_SKILL` env var (Step 4) carry their own environment requirements. Steps
+unrelated to verify (git operations, build, changelog, PR creation, review cycle) run
+the same way regardless of backend.
 
 ## Input
 
@@ -33,10 +36,15 @@ any more, because non-sandbox backends are now first-class. The default
 Playwright availability, etc.) when invoked; alternative verify skills
 do the same for their own environments.
 
-1. **Confirm `git` + `pnpm` + (optionally) `gh` are on PATH.** These are
-   used in every step regardless of which verify backend runs. The
-   sandbox image ships all three; host setups usually have all three
-   too. If running on host, install any missing tools before continuing.
+1. **Confirm `git`, `pnpm`, and `gh` are on PATH.** All three are
+   required regardless of which verify backend runs:
+   - `git` — branch / commit / push (every step touches git)
+   - `pnpm` — Step 3 (build), Step 6 (changelogger)
+   - `gh` — Step 8 (opens / updates the PR, posts the DoD verification
+     comment when Step 5 produced `/tmp/dod-report.md` content)
+
+   The sandbox image ships all three. Host setups usually have all three
+   too. Install any missing tool before continuing.
 
 2. **Read the task md** and extract:
    - The branch name to create (from the Submitting section)
@@ -85,19 +93,22 @@ Build must succeed before proceeding. If it fails, fix the error and re-run.
 
 ## Step 4 — UI verification
 
-Invoke the verify skill. The default is `/premium-analytics-verify-ui` (wp-verify
-Playwright running inside `jetpack-ai-sandbox`). If the caller has set the
-`VERIFY_SKILL` env var, invoke the value of that var instead — this is the
-extension point for non-sandbox backends (host-runnable wp-verify via port
-mapping, JN-style remote staging, jsdom unit tests, …).
+Invoke a verify skill. Slash commands are invoked directly — not via the shell —
+so the resolution is a literal choice, not a bash interpolation:
+
+- **If the `VERIFY_SKILL` env var is unset (default case):** invoke
+  `/premium-analytics-verify-ui` (wp-verify Playwright running inside
+  `jetpack-ai-sandbox`).
+- **If `VERIFY_SKILL` is set:** invoke the slash command whose name matches
+  the value. This is the extension point for non-sandbox backends —
+  host-runnable wp-verify via port mapping, JN-style remote staging,
+  jsdom unit tests, etc.
+
+Before invoking, print the chosen skill so the run log is self-documenting:
 
 ```bash
-# Resolve the verify skill to invoke for this run.
-VERIFY_SKILL="${VERIFY_SKILL:-/premium-analytics-verify-ui}"
-echo "Verify skill: $VERIFY_SKILL"
+echo "Verify skill: ${VERIFY_SKILL:-/premium-analytics-verify-ui}"
 ```
-
-Then invoke `$VERIFY_SKILL` (e.g., `/premium-analytics-verify-ui` by default).
 
 If verification fails, fix the root cause and re-run from Step 3. Do not proceed until
 verification passes.
