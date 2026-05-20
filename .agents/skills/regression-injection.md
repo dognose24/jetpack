@@ -1,14 +1,17 @@
 ---
 description: >
-  Run a local-only regression injection against the wp-verify Playwright suite — stage
-  the implementation as a baseline, apply the deliberate edit described in the task md's
-  DoD section, rebuild, confirm the expected spec fails (and only that spec), revert
-  via the git index, and confirm the suite returns green. Append a structured outcome
-  block to /tmp/dod-report.md so the caller's evidence-persistence step can post it.
-  Must run inside jetpack-ai-sandbox (Docker socket required for the build + verify
-  loop).
+  Run a regression injection cycle against a caller-provided test backend — the
+  injection edit lives in the local git working tree only (revert via git index;
+  nothing is ever committed by the skill), but the build + verify backends themselves
+  may be local or remote. Stage the implementation as a baseline, apply the deliberate
+  edit described in the task md's DoD section, rebuild via $BUILD_COMMAND, run the
+  suite via $VERIFY_COMMAND, confirm the expected spec fails (and only that spec),
+  revert via the git index, and confirm the suite returns green. Append a structured
+  outcome block to /tmp/dod-report.md. The skill is environment-agnostic: any backend
+  (wp-verify Playwright, JN DOM check via rsync+curl, host-only jsdom, …) plugs in by
+  setting the two env vars.
 argument-hint: <task-md-path>
-allowed-tools: Bash(docker:*), Bash(npm:*), Bash(pnpm:*), Bash(playwright:*), Bash(test:*), Bash(cat:*), Bash(cp:*), Bash(git add:*), Bash(git checkout:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git status:*), Read
+allowed-tools: Bash(npm:*), Bash(pnpm:*), Bash(playwright:*), Bash(test:*), Bash(cat:*), Bash(cp:*), Bash(bash:*), Bash(git add:*), Bash(git checkout:*), Bash(git diff:*), Bash(git rev-parse:*), Bash(git status:*), Read
 ---
 
 # regression-injection
@@ -27,30 +30,113 @@ Path to a task md. The DoD section must contain a regression-injection acceptanc
 item describing:
 
 - **Edit applied**: which string/value in which file changes to what
-- **Expected failing spec**: which `*.spec.ts` file should fail, and on what assertion
+- **Expected failing spec**: which spec / assertion should fail
 - **Revert + re-verify**: implicit — always required
 
 The Scope section names the implementation files (used as the baseline-staging set).
 
+## Configuration — `BUILD_COMMAND` and `VERIFY_COMMAND`
+
+The skill itself is backend-agnostic. Two environment variables name the
+caller's chosen toolchain:
+
+| Var | Purpose |
+| --- | --- |
+| `BUILD_COMMAND` | Shell command that makes the changed code visible to the verify backend (e.g. `pnpm build` for a bundler-loaded package, `rsync ...` to deploy to a remote test host, no-op when the backend reads sources directly). |
+| `VERIFY_COMMAND` | Shell command that runs the test suite which the injection should make fail. |
+
+**Exit-code contract.** Both vars must exit non-zero on any internal failure —
+not just `VERIFY_COMMAND`. A silently-failing `BUILD_COMMAND` would propagate
+stale binaries into the verify step and produce misleading results (the
+injection would appear to fail to reproduce because the verify never saw the
+new code). The skill aborts the cycle as soon as either command exits non-zero.
+
+Practical implications:
+- Multi-step commands must use `&&` to propagate errors, not `;`. The skill
+  invokes each var via `bash -o pipefail -c "$VAR"`, which catches the common
+  pipeline-swallow case (e.g. the JN-style `curl ... | <DOM-extractor>`
+  example: a curl/network failure now propagates instead of being masked by
+  the extractor's exit 0 on empty input). But `;`-chained commands are *not*
+  caught — the caller is responsible for `&&`-chaining anything where earlier
+  failures must abort.
+- Cleanup steps that should always run regardless of test outcome belong
+  *outside* the var, in the caller's flow — not appended with `;`.
+
+Both vars accept arbitrary shell command strings. `$(...)` substitutions,
+env-var references, and pipes all expand at execution time inside the
+spawned `bash -o pipefail` shell.
+
+**Reference defaults** (the historical inner-loop wp-verify backend — applied
+when the caller leaves the var unset *or* empty; see the `${VAR:=…}` lines in
+Pre-flight below):
+
+```bash
+BUILD_COMMAND="CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build"
+VERIFY_COMMAND="NODE_PATH=\$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts"
+```
+
+The `\$` in `VERIFY_COMMAND`'s default is intentional — it escapes `$` so
+the `$(npm root -g)` substitution defers to the spawned `bash -o pipefail`
+subshell at execution time rather than running at default-assignment time.
+Host and sandbox `npm root -g` return different paths, so deferring keeps
+the substitution context-correct regardless of where the var got set.
+Callers passing their own `VERIFY_COMMAND` for non-wp-verify backends
+typically don't need this escape — only relevant when the substitution
+must happen in a different shell from the one that sets the variable.
+
+The wp-verify Playwright backend additionally requires a running wp-verify Docker
+stack (mysql + wordpress + wpcli reachable from `http://wordpress`). Use it from
+inside `jetpack-ai-sandbox` after `bash tools/ai-sandbox/wp-verify.sh up`.
+
+**Other backends** the caller can plug in:
+
+- **JN DOM check** (Symphony outer-loop style):
+  `BUILD_COMMAND="rsync -a projects/packages/premium-analytics/build/ <jn-host>:/srv/.../premium-analytics/"`
+  `VERIFY_COMMAND="curl -s https://<jn-host>/wp-admin/admin.php?page=jetpack-premium-analytics | <DOM-extractor>"`
+- **Host-only Playwright** against an external WP staging URL:
+  `BUILD_COMMAND="CI=true pnpm --filter=... build && rsync ..."`
+  `VERIFY_COMMAND="playwright test tests/staging.spec.ts"`
+- **jsdom unit test** (no WP runtime needed):
+  `BUILD_COMMAND=":"` (no-op)
+  `VERIFY_COMMAND="npx jest projects/packages/premium-analytics/__tests__/"`
+
+**Permission model note.** Because the skill executes both vars via
+`bash -o pipefail -c "$VAR"` and `allowed-tools` includes `Bash(bash:*)`, Claude Code's
+per-binary permission gate does **not** apply to the contents of the
+variables — whatever shell command the caller sets will run. The skill does
+not validate or restrict the command's contents. The caller is responsible
+for the security and correctness of the values they set; treat `BUILD_COMMAND`
+and `VERIFY_COMMAND` as fully-trusted shell input.
+
 ## Pre-flight
 
 ```bash
-test -f /.dockerenv || { echo "Run this skill inside jetpack-ai-sandbox" >&2; exit 1; }
-docker info > /dev/null 2>&1 || {
-  echo "Docker socket not available — the sandbox container needs /var/run/docker.sock mounted." >&2
-  echo "Exit this container and run 'bash tools/ai-sandbox/wp-verify.sh up' from the host." >&2
-  echo "(Re-running wp-verify.sh up from inside a container does not recreate jetpack-ai-sandbox; only a host-side invocation can attach the socket volume.)" >&2
-  exit 1
-}
-
-# Anchor cwd at the repo root so later git/pnpm/playwright commands work
-# regardless of where the caller (or earlier diagnostic) left the shell.
+# Anchor cwd at the repo root so later git/build/verify commands work
+# regardless of where the caller (or an earlier diagnostic) left the shell.
 cd "$(git rev-parse --show-toplevel)"
+
+# Fall back to the wp-verify backend defaults documented in the Configuration
+# section above when the caller leaves the var unset *or* empty. `${VAR:=…}`
+# (the `:=` form) treats both states identically, so a deliberate empty
+# value like `BUILD_COMMAND=""` also falls back — callers wanting a literal
+# no-op should set `BUILD_COMMAND=":"` (the shell no-op).
+#
+# The `\$(npm root -g)` in VERIFY_COMMAND's default is intentional — the
+# backslash escapes `$` so command substitution defers to the spawned
+# `bash -o pipefail -c "$VERIFY_COMMAND"` (which runs inside the sandbox where
+# `npm root -g` returns the correct global node_modules path). Without the
+# backslash, $(npm root -g) would expand *here* at default-assignment time,
+# pinning NODE_PATH to whatever shell ran wp-verify.sh — wrong if the host
+# and sandbox npm prefixes differ (they do: host typically has a user-local
+# prefix; sandbox uses /usr/local/lib/nodejs).
+: "${BUILD_COMMAND:=CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build}"
+: "${VERIFY_COMMAND:=NODE_PATH=\$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts}"
 ```
 
-The caller (usually `/premium-analytics-implement-task` Step 4) is expected to have
-already built + verified the implementation, so the working tree currently matches
-the implementation. This skill does not re-run that initial verify.
+The caller (usually `/premium-analytics-implement-task` Step 5) invokes this skill
+*after* Steps 3 (build) and 4 (UI verification) have already established a green
+baseline — so the working tree currently matches the implementation. This skill does
+not re-run that initial verify.
 
 ## Step 1 — Stage implementation as baseline
 
@@ -80,17 +166,11 @@ git diff --cached --name-only   # the implementation files
 ## Step 3 — Rebuild + verify
 
 ```bash
-CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build
-NODE_PATH=$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts
+bash -o pipefail -c "$BUILD_COMMAND"
+bash -o pipefail -c "$VERIFY_COMMAND"
 ```
 
-`NODE_PATH=$(npm root -g)` is required because the sandbox image installs
-`@playwright/test` globally; without it, the config file's
-`import { defineConfig } from '@playwright/test'` in
-`tools/ai-sandbox/wp-verify/playwright.config.ts` fails to resolve, since
-standard Node module resolution from that file doesn't reach the global path.
-
-Capture the runner's output — Step 6 needs the failure-message excerpt.
+Capture the verify command's output — Step 6 needs the failure-message excerpt.
 
 ## Step 4 — Confirm expected failure isolation
 
@@ -116,8 +196,8 @@ known to git` (exit 1) and require a retry from the correct directory.
 ```bash
 cd "$(git rev-parse --show-toplevel)"
 git checkout -- <injected-file>...   # one or more paths; restores from index, drops only the unstaged injection
-CI=true pnpm --filter='@automattic/jetpack-premium-analytics' build
-NODE_PATH=$(npm root -g) playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts
+bash -o pipefail -c "$BUILD_COMMAND"
+bash -o pipefail -c "$VERIFY_COMMAND"
 ```
 
 The suite must be green again. If not — stop. The index baseline was contaminated
@@ -132,9 +212,10 @@ cat >> /tmp/dod-report.md << 'EOF'
 - **<one-line DoD item title from task md>**: PASS
   - Edit applied: <e.g. 'Desktop' → 'Workstation' in routes/dashboard/stage.tsx>
   - Expected failing spec: <spec-path:line and assertion>
-  - Actual failure: <runner's failure-message excerpt>
+  - Actual failure: <verify command's failure-message excerpt>
   - Other specs: green throughout
-  - Revert + re-run: <playwright summary, e.g. 4 passed (0 skipped)>
+  - Revert + re-run: <verify command summary, e.g. 4 passed (0 skipped)>
+  - Backend: <e.g. wp-verify Playwright; JN DOM; jsdom>
 EOF
 ```
 
@@ -154,3 +235,7 @@ and posts it as the `## DoD verification` PR comment. Do not commit
 - The caller is responsible for invoking `cp /dev/null /tmp/dod-report.md` at the
   start of its own flow (so a previous interrupted run's buffer doesn't leak into
   this run). This skill only appends.
+- The skill does not enforce environment prerequisites for the chosen backend
+  (no `/.dockerenv` check, no socket probe). Backend errors surface from the
+  `bash -o pipefail -c "$BUILD_COMMAND"` / `bash -o pipefail -c "$VERIFY_COMMAND"` calls themselves with
+  their own messages.
