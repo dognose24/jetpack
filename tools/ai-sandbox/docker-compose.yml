@@ -1,7 +1,14 @@
 services:
   jetpack-ai:
     build: .
-    container_name: jetpack-ai-sandbox
+    # Container names take an optional ${WP_VERIFY_INSTANCE} suffix so two
+    # concurrent stacks (e.g. parallel agent workspaces) can coexist on the
+    # same Docker daemon. Default — env unset — keeps the historical names
+    # (`jetpack-ai-sandbox`, `jetpack-ai-mysql`, etc.) so existing flows
+    # are unaffected. wp-verify.sh derives matching `docker inspect`/`exec`
+    # targets and a per-instance Compose project name so volumes + networks
+    # isolate too.
+    container_name: jetpack-ai-sandbox${WP_VERIFY_INSTANCE:+-${WP_VERIFY_INSTANCE}}
     volumes:
       - ${HOME:?HOME not set}/.claude:/home/dev/.claude
       - ../../:/home/dev/jetpack
@@ -20,7 +27,7 @@ services:
 
   mysql:
     image: mysql:8.0
-    container_name: jetpack-ai-mysql
+    container_name: jetpack-ai-mysql${WP_VERIFY_INSTANCE:+-${WP_VERIFY_INSTANCE}}
     profiles: ["wp-verify"]
     environment:
       MYSQL_ROOT_PASSWORD: wordpress
@@ -37,7 +44,7 @@ services:
 
   wordpress:
     image: wordpress:6.8-php8.4-apache
-    container_name: jetpack-ai-wordpress
+    container_name: jetpack-ai-wordpress${WP_VERIFY_INSTANCE:+-${WP_VERIFY_INSTANCE}}
     profiles: ["wp-verify"]
     depends_on:
       mysql:
@@ -57,7 +64,7 @@ services:
 
   wpcli:
     image: wordpress:cli-2.11.0-php8.4
-    container_name: jetpack-ai-wpcli
+    container_name: jetpack-ai-wpcli${WP_VERIFY_INSTANCE:+-${WP_VERIFY_INSTANCE}}
     profiles: ["wp-verify"]
     user: "33:33"
     depends_on:
