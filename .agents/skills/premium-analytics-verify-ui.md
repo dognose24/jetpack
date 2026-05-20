@@ -116,12 +116,20 @@ WP_BASE=http://localhost:${WP_VERIFY_HOST_PORT:-8080} \
   playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts
 ```
 
-Host-side use requires `playwright` + `@playwright/test` on PATH (the
-sandbox image installs them globally; host machines may need
-`pnpm install` / `npm install -g playwright @playwright/test`). The wp-verify
-Docker stack must still be running on the same host via
-`bash tools/ai-sandbox/wp-verify.sh up` — this skill only does verification;
-it doesn't bring the stack up or down.
+Host-side use requires the `playwright` binary on `PATH` plus
+`@playwright/test` discoverable at `NODE_PATH=$(npm root -g)`. The sandbox
+image installs both globally; host machines need
+`npm install -g playwright @playwright/test && playwright install chromium`.
+(Project-local `pnpm install` alone does not satisfy this — pnpm puts
+binaries under `node_modules/.bin` and uses a different global prefix from
+npm. Callers who prefer to keep playwright as a repo-local dev dep should
+swap the invocation to `pnpm exec playwright test --config …` and drop
+the `NODE_PATH=$(npm root -g)` prefix; the `WP_BASE` env var still
+applies.)
+
+The wp-verify Docker stack must still be running on the same host via
+`bash tools/ai-sandbox/wp-verify.sh up` — this skill only does
+verification; it doesn't bring the stack up or down.
 
 `NODE_PATH=$(npm root -g)` is required because the sandbox image installs
 `@playwright/test` globally; without it, the config file's
