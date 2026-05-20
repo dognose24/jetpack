@@ -201,6 +201,6 @@ Safe to run from inside `jetpack-ai-sandbox` — when in-container the script on
 
 ## HARD rules
 
-- Never run this skill outside the `jetpack-ai-sandbox` container — the Docker socket gives host-level access.
+- Only run on a trusted single-user machine — either the developer's own host or the `jetpack-ai-sandbox` container on it. Both modes give the skill (and any Playwright spec it runs) Docker-equivalent capabilities: the sandbox via the mounted `/var/run/docker.sock`, the host via direct Docker CLI access. Do not run on shared / multi-tenant machines where other users could interact with the same WP instance.
 - Never commit `/tmp/pa-verify/` contents.
-- The admin credentials (`admin` / `password`) are for the throwaway test environment only — do not reuse elsewhere.
+- The admin credentials (`admin` / `password`) are for the throwaway test environment only — do not reuse elsewhere. The WP port is bound to `127.0.0.1` so it isn't LAN-reachable, but anyone with local access to the machine can reach it.
