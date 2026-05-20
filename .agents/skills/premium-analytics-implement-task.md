@@ -1,9 +1,10 @@
 ---
 description: >
   Implement a premium-analytics task end-to-end: read the task md, create a branch from
-  fork/trunk, implement, build, run UI verification, add a changelog entry, push, open a PR,
-  start the review cycle, and audit for new invariants worth capturing into package docs.
-  Run inside jetpack-ai-sandbox (Docker socket required).
+  fork/trunk, implement, build, run UI verification (default backend: wp-verify
+  Playwright in jetpack-ai-sandbox; override via `VERIFY_SKILL` env var for non-sandbox
+  backends), add a changelog entry, push, open a PR, start the review cycle, and audit
+  for new invariants worth capturing into package docs.
 allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:p), Bash(cat:*), Bash(cp:*), Bash(tr:*), Bash(sed:*), Bash(grep:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git fetch:*), Bash(git checkout:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(git push:*), Bash(git remote:*), Bash(git rm:*), Bash(git log:*), Bash(git status:*), Bash(gh pr create:*), Bash(gh pr view:*), Bash(gh pr comment:*), Bash(gh pr edit:*), Bash(gh api:*), Bash(mktemp:*), Write, Read
 ---
 
@@ -25,17 +26,19 @@ Read the task md fully before starting.
 
 ## Pre-flight
 
-1. **Confirm inside sandbox:**
-   ```bash
-   test -f /.dockerenv || { echo "Run this skill inside jetpack-ai-sandbox"; exit 1; }
-   ```
+Environment requirements depend on the chosen `VERIFY_SKILL` (Step 4) —
+this skill does *not* enforce sandbox / Docker presence at the top level
+any more, because non-sandbox backends are now first-class. The default
+`/premium-analytics-verify-ui` runs its own pre-flight (Docker socket,
+Playwright availability, etc.) when invoked; alternative verify skills
+do the same for their own environments.
 
-2. **Confirm Docker socket:**
-   ```bash
-   docker info > /dev/null 2>&1 || { echo "Docker socket not available — run wp-verify.sh up first"; exit 1; }
-   ```
+1. **Confirm `git` + `pnpm` + (optionally) `gh` are on PATH.** These are
+   used in every step regardless of which verify backend runs. The
+   sandbox image ships all three; host setups usually have all three
+   too. If running on host, install any missing tools before continuing.
 
-3. **Read the task md** and extract:
+2. **Read the task md** and extract:
    - The branch name to create (from the Submitting section)
    - The changelog command
    - The scope (files allowed to touch)
@@ -82,12 +85,32 @@ Build must succeed before proceeding. If it fails, fix the error and re-run.
 
 ## Step 4 — UI verification
 
+Invoke the verify skill. The default is `/premium-analytics-verify-ui` (wp-verify
+Playwright running inside `jetpack-ai-sandbox`). If the caller has set the
+`VERIFY_SKILL` env var, invoke the value of that var instead — this is the
+extension point for non-sandbox backends (host-runnable wp-verify via port
+mapping, JN-style remote staging, jsdom unit tests, …).
+
 ```bash
-/premium-analytics-verify-ui
+# Resolve the verify skill to invoke for this run.
+VERIFY_SKILL="${VERIFY_SKILL:-/premium-analytics-verify-ui}"
+echo "Verify skill: $VERIFY_SKILL"
 ```
+
+Then invoke `$VERIFY_SKILL` (e.g., `/premium-analytics-verify-ui` by default).
 
 If verification fails, fix the root cause and re-run from Step 3. Do not proceed until
 verification passes.
+
+`VERIFY_SKILL` is a slash-command name — distinct from regression-injection's
+`BUILD_COMMAND` / `VERIFY_COMMAND` (which are shell command strings). Two
+different abstractions because the verify *skill* is a multi-step orchestrated
+process (compose up, wait for wpcli, run playwright, screenshot, commit, …)
+whereas regression-injection's `VERIFY_COMMAND` is a single executable invocation
+of the test suite. Don't conflate them — a host-runnable verify backend is a
+*different skill* (passed via `VERIFY_SKILL`); a different test-runner inside
+the same orchestrated process is just a different `VERIFY_COMMAND` (handled
+inside the verify skill or via regression-injection).
 
 ## Step 5 — Execute additional Agent-verifiable DoD items
 
