@@ -43,11 +43,28 @@ caller's chosen toolchain:
 | Var | Purpose |
 | --- | --- |
 | `BUILD_COMMAND` | Shell command that makes the changed code visible to the verify backend (e.g. `pnpm build` for a bundler-loaded package, `rsync ...` to deploy to a remote test host, no-op when the backend reads sources directly). |
-| `VERIFY_COMMAND` | Shell command that runs the test suite which the injection should make fail. Must exit non-zero on test failure. |
+| `VERIFY_COMMAND` | Shell command that runs the test suite which the injection should make fail. |
 
-Both vars accept arbitrary shell command strings. They're invoked via
-`bash -c "$VAR"`, so `$(...)` substitutions, env-var references, and pipes
-all expand at execution time.
+**Exit-code contract.** Both vars must exit non-zero on any internal failure —
+not just `VERIFY_COMMAND`. A silently-failing `BUILD_COMMAND` would propagate
+stale binaries into the verify step and produce misleading results (the
+injection would appear to fail to reproduce because the verify never saw the
+new code). The skill aborts the cycle as soon as either command exits non-zero.
+
+Practical implications:
+- Multi-step commands must use `&&` to propagate errors, not `;`. The skill
+  invokes each var via `bash -o pipefail -c "$VAR"`, which catches the common
+  pipeline-swallow case (e.g. the JN-style `curl ... | <DOM-extractor>`
+  example: a curl/network failure now propagates instead of being masked by
+  the extractor's exit 0 on empty input). But `;`-chained commands are *not*
+  caught — the caller is responsible for `&&`-chaining anything where earlier
+  failures must abort.
+- Cleanup steps that should always run regardless of test outcome belong
+  *outside* the var, in the caller's flow — not appended with `;`.
+
+Both vars accept arbitrary shell command strings. `$(...)` substitutions,
+env-var references, and pipes all expand at execution time inside the
+spawned `bash -o pipefail` shell.
 
 **Reference defaults** (the historical inner-loop wp-verify backend — applied
 when the caller leaves the var unset *or* empty; see the `${VAR:=…}` lines in
@@ -75,7 +92,7 @@ inside `jetpack-ai-sandbox` after `bash tools/ai-sandbox/wp-verify.sh up`.
   `VERIFY_COMMAND="npx jest projects/packages/premium-analytics/__tests__/"`
 
 **Permission model note.** Because the skill executes both vars via
-`bash -c "$VAR"` and `allowed-tools` includes `Bash(bash:*)`, Claude Code's
+`bash -o pipefail -c "$VAR"` and `allowed-tools` includes `Bash(bash:*)`, Claude Code's
 per-binary permission gate does **not** apply to the contents of the
 variables — whatever shell command the caller sets will run. The skill does
 not validate or restrict the command's contents. The caller is responsible
@@ -131,8 +148,8 @@ git diff --cached --name-only   # the implementation files
 ## Step 3 — Rebuild + verify
 
 ```bash
-bash -c "$BUILD_COMMAND"
-bash -c "$VERIFY_COMMAND"
+bash -o pipefail -c "$BUILD_COMMAND"
+bash -o pipefail -c "$VERIFY_COMMAND"
 ```
 
 Capture the verify command's output — Step 6 needs the failure-message excerpt.
@@ -161,8 +178,8 @@ known to git` (exit 1) and require a retry from the correct directory.
 ```bash
 cd "$(git rev-parse --show-toplevel)"
 git checkout -- <injected-file>...   # one or more paths; restores from index, drops only the unstaged injection
-bash -c "$BUILD_COMMAND"
-bash -c "$VERIFY_COMMAND"
+bash -o pipefail -c "$BUILD_COMMAND"
+bash -o pipefail -c "$VERIFY_COMMAND"
 ```
 
 The suite must be green again. If not — stop. The index baseline was contaminated
@@ -202,5 +219,5 @@ and posts it as the `## DoD verification` PR comment. Do not commit
   this run). This skill only appends.
 - The skill does not enforce environment prerequisites for the chosen backend
   (no `/.dockerenv` check, no socket probe). Backend errors surface from the
-  `bash -c "$BUILD_COMMAND"` / `bash -c "$VERIFY_COMMAND"` calls themselves with
+  `bash -o pipefail -c "$BUILD_COMMAND"` / `bash -o pipefail -c "$VERIFY_COMMAND"` calls themselves with
   their own messages.
