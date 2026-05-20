@@ -54,6 +54,20 @@ services:
       WORDPRESS_DB_USER: wordpress
       WORDPRESS_DB_PASSWORD: wordpress
       WORDPRESS_DB_NAME: wordpress
+      # Make WP serve URLs (siteurl, home, redirects, admin links) based on
+      # the incoming Host header instead of the value baked into the options
+      # table at install time. Without this, a request from the host at
+      # http://localhost:8080 redirects to http://wordpress/wp-admin/ (the
+      # install-time --url=http://wordpress), which the host browser can't
+      # resolve. The constant overrides win at site_url() / home_url() call
+      # sites, so login + admin pages now correctly route back to whichever
+      # network the client reached WP on (`http://wordpress` from inside the
+      # sandbox, `http://localhost:${WP_VERIFY_HOST_PORT}` from the host).
+      WORDPRESS_CONFIG_EXTRA: |
+        if ( ! empty( $$_SERVER['HTTP_HOST'] ) ) {
+            define( 'WP_SITEURL', ( ! empty( $$_SERVER['HTTPS'] ) ? 'https' : 'http' ) . '://' . $$_SERVER['HTTP_HOST'] );
+            define( 'WP_HOME', WP_SITEURL );
+        }
     volumes:
       - wp_html:/var/www/html
     healthcheck:
