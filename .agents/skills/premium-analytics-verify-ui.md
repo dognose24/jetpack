@@ -55,43 +55,78 @@ Verify that the analytics dashboard mounts correctly in wp-admin after a premium
 
 ## Step 1 — Start WordPress environment
 
+`wp-verify.sh up` handles `JETPACK_HOST_PATH` detection internally. Works
+from the repo root on the host or from inside `jetpack-ai-sandbox`. Pass
+`WP_VERIFY_INSTANCE=<id>` and/or `WP_VERIFY_HOST_PORT=<port>` via the
+environment if running parallel stacks (see `wp-verify.sh` header for the
+constraints).
+
 ```bash
-# wp-verify.sh auto-detects JETPACK_HOST_PATH and starts the full stack.
-# Works from the repo root on the host, or from inside jetpack-ai-sandbox.
 bash tools/ai-sandbox/wp-verify.sh up
-
-# Convenience variables for subsequent compose exec calls.
-JETPACK_HOST_PATH=$(docker inspect jetpack-ai-sandbox \
-  --format '{{range .Mounts}}{{if eq .Destination "/home/dev/jetpack"}}{{.Source}}{{end}}{{end}}')
-export JETPACK_HOST_PATH
-COMPOSE_ARGS="-f tools/ai-sandbox/docker-compose.yml -f tools/ai-sandbox/docker-compose.wp-verify.yml --project-directory tools/ai-sandbox --profile wp-verify"
-
-echo "Waiting for WordPress to be ready..."
-TRIES=0
-until docker compose $COMPOSE_ARGS exec -T wordpress curl -sf http://localhost/wp-login.php > /dev/null 2>&1; do
-  TRIES=$((TRIES + 1))
-  [ $TRIES -gt 30 ] && echo "WordPress did not start in time" && exit 1
-  sleep 5
-done
-echo "WordPress is up."
 ```
+
+`docker compose up -d` (which `wp-verify.sh` calls) does not pass
+`--wait`, so it returns once all containers are *running* — not once all
+are *healthy*. The `depends_on: condition: service_healthy` chain
+guarantees that by the time wpcli is started, mysql and WordPress have
+already passed their healthchecks (so WordPress is reachable). wpcli
+itself has no healthcheck and starts immediately, but its `wp core install`
++ `wp plugin activate gutenberg` then run inside that container — that
+work is what Step 2 waits for.
 
 ## Step 2 — Wait for wpcli setup to complete
 
-The `wpcli` container runs `wp core install` and `wp plugin activate gutenberg` on startup.
-Wait for it to finish before proceeding (the container reaches `sleep infinity` only after
-successful setup):
+wpcli's startup command (see `tools/ai-sandbox/docker-compose.yml`) runs
+two sequential steps before reaching `sleep infinity`:
+
+```sh
+wp core is-installed || wp core install ...                   # step A
+wp plugin is-active gutenberg || { wp plugin install ... && wp plugin activate gutenberg; }   # step B
+sleep infinity
+```
+
+Probing `wp core is-installed` only confirms step A — step B's plugin
+activation runs after, and Step 3's Playwright suite needs Gutenberg
+active (premium-analytics' admin page uses Gutenberg APIs). Probe `wp
+plugin is-active gutenberg` instead: it returns 0 only after step B
+completes, which implies step A also did (sequential):
 
 ```bash
-echo "Waiting for wpcli setup to complete..."
+# Resolve the wpcli container name. Three cases:
+# 1. Caller exported WP_VERIFY_INSTANCE explicitly — use it directly.
+# 2. Inside a *suffixed* sandbox container with WP_VERIFY_INSTANCE
+#    unset (compose doesn't propagate the env var into the container's
+#    runtime env). Read the current container's compose project label
+#    and back-derive the instance — same approach wp-verify.sh uses for
+#    its own in-sandbox reconciliation.
+# 3. On the host, or inside the default unsuffixed sandbox container.
+#    Neither check below applies; WP_VERIFY_INSTANCE stays empty, the
+#    suffix expansion below is empty, and the target is the historical
+#    unsuffixed `jetpack-ai-wpcli` container.
+if [ -z "${WP_VERIFY_INSTANCE:-}" ] && [ -f /.dockerenv ]; then
+  PROJECT=$(docker inspect "$HOSTNAME" --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)
+  case "$PROJECT" in
+    ai-sandbox-*) WP_VERIFY_INSTANCE="${PROJECT#ai-sandbox-}" ;;
+  esac
+fi
+WPCLI="jetpack-ai-wpcli${WP_VERIFY_INSTANCE:+-${WP_VERIFY_INSTANCE}}"
+
+echo "Waiting for wpcli setup to complete (target: $WPCLI)..."
 TRIES=0
-until docker compose $COMPOSE_ARGS exec -T wpcli wp core is-installed --allow-root 2>/dev/null; do
+until docker exec "$WPCLI" wp plugin is-active gutenberg --allow-root 2>/dev/null; do
   TRIES=$((TRIES + 1))
   [ $TRIES -gt 20 ] && echo "wpcli setup did not complete in time" && exit 1
   sleep 5
 done
 echo "wpcli setup complete."
 ```
+
+The `${WP_VERIFY_INSTANCE:+-${WP_VERIFY_INSTANCE}}` suffix matches
+container-name parameterization added in PR #42, so parallel stacks
+(e.g. `WP_VERIFY_INSTANCE=foo`) target the right wpcli container. The
+in-sandbox fallback reads the same `com.docker.compose.project` label
+`wp-verify.sh` consults, so callers who `docker exec` into a suffixed
+sandbox without re-exporting the env var still target the right stack.
 
 ## Step 3 — Run Playwright verification
 
