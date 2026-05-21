@@ -46,7 +46,29 @@ do the same for their own environments.
    The sandbox image ships all three. Host setups usually have all three
    too. Install any missing tool before continuing.
 
-2. **Read the task md** and extract:
+2. **If running from the host (not inside `jetpack-ai-sandbox`),
+   export `WP_BASE`** so the default `/premium-analytics-verify-ui`
+   backend points its Playwright at the host-published port instead of
+   the sandbox-internal `http://wordpress`:
+
+   ```bash
+   export WP_BASE="http://localhost:${WP_VERIFY_HOST_PORT:-8080}"
+   ```
+
+   Why this is needed: Step 4's default verify skill +
+   regression-injection's default `VERIFY_COMMAND` both run
+   `playwright test --config tools/ai-sandbox/wp-verify/playwright.config.ts`,
+   and that config falls back to `http://wordpress` (the
+   docker-network hostname only resolvable from inside the sandbox)
+   when `WP_BASE` is unset. Inside the sandbox: leave `WP_BASE` unset.
+   On the host: export it before invoking this skill, *not* inside
+   one of the steps — Step 5's `/regression-injection` invocation
+   needs to inherit it too.
+
+   Skip this step if `VERIFY_SKILL` is overridden to a backend that
+   doesn't use `WP_BASE` (e.g. jsdom unit tests, JN remote staging).
+
+3. **Read the task md** and extract:
    - The branch name to create (from the Submitting section)
    - The changelog command
    - The scope (files allowed to touch)
