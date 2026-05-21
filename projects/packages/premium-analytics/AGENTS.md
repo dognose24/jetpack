@@ -166,9 +166,13 @@ know up front, so individual task issues don't re-explain the rationale.
   measures inline-SVG descender space and the chart height drifts
   upward on each cycle.
 
-- **The CSS import needs an inline `eslint-disable-line` directive** —
-  not `eslint-disable-next-line`. See "ESLint patterns" below for the
-  why; the full forensic trail lives in
+- **The CSS import needs an `eslint-disable` directive — and both
+  forms have been observed to disappear during pre-commit
+  `lint-file --fix`.** Use either inline (`eslint-disable-line`) or
+  next-line (`eslint-disable-next-line`); after `git commit`, run
+  `git show HEAD -- <file>` and confirm the comment is still on the
+  import. If missing, re-add it in a follow-up commit. See "ESLint
+  patterns" below for details; the 5-round forensic trail lives in
   [`docs/research/eslint-disable-line-discovery.md`](docs/research/eslint-disable-line-discovery.md).
 
 ### ESLint patterns
@@ -182,14 +186,35 @@ to disable that rule for the line:
 import '@automattic/charts/style.css'; // eslint-disable-line import/no-unresolved -- CSS subpath; dist/index.css is gitignored
 ```
 
-**Use the inline form** (`eslint-disable-line` at the end of the import
-line), not `eslint-disable-next-line` on the line above. The pre-commit
-lint pipeline reorders imports under `import/order` (newlines-between
-disabled, alphabetic ordering enforced by
-`tools/js-tools/eslintrc/base.mjs:318-325`), and the standalone
-next-line comment has been observed to disappear during that pass in
-multiple sandbox runs. The trailing-on-the-same-line form travels with
-the import token, so reordering doesn't separate them.
+**Both forms are observed to disappear during pre-commit `lint-file
+--fix`** when new imports land in a file at the same time. The host
+dogfood for [RSM-3713](https://linear.app/a8c/issue/RSM-3713) (PR #49)
+saw the inline form stripped on the initial commit
+(`dd52a32094`); a follow-up commit (`e60c87ea93`) re-added it, and
+because that commit only changed the directive (not surrounding
+imports), the strip didn't re-fire. A `git log --all -S 'eslint-disable-line
+import/no-unresolved'` on `routes/dashboard/stage.tsx` shows
+`e60c87ea93` is the *only* commit in repo history with the inline
+form — meaning the prior "inline form already ships in pie chart"
+assumption was unverified; no commit on `fork/add/premium-analytics-pie-chart`
+actually contained the directive either.
+
+The pre-commit pipeline runs Prettier and `eslint --fix` via
+`lint-file`. The `import/order` rule is configured with
+`newlines-between: 'never'` + alphabetic ordering
+(`tools/js-tools/eslintrc/base.mjs:318-325`). What exact step strips
+the comment is still not isolated — see
+[`docs/research/eslint-disable-line-discovery.md`](docs/research/eslint-disable-line-discovery.md)
+for which mechanisms were ruled out across 5 rounds. The directive
+itself is correct (lint and CI both pass when it's present); the
+unreliable part is the formatter pipeline preserving it through a
+new-imports commit.
+
+**Operational rule:** after `git commit` lands a file with this
+import, immediately run `git show HEAD -- <file>` and check the
+directive is still on the import line. If it's gone, re-add it in a
+follow-up commit; that commit's pre-commit pass typically lets the
+comment through because nothing else is being rewritten.
 
 ### `@wordpress/boot` shim
 

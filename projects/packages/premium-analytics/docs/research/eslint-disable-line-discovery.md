@@ -107,30 +107,85 @@ The practical fix (inline `eslint-disable-line`) is unchanged; the
 spec just stopped making claims about lint internals it couldn't
 substantiate.
 
-## Discipline that came out of this
+## Round 5 — host dogfood (PR #49 / [RSM-3713](https://linear.app/a8c/issue/RSM-3713)) falsifies "inline is robust"
+
+The Phase 1 Linear-first restructure (PR #48) shipped an AGENTS.md
+"ESLint patterns" section claiming the inline form persists because
+"the trailing-on-the-same-line form travels with the import token, so
+reordering doesn't separate them." The first dogfood task run under
+that spec — adding a page-views line chart on host — falsified that
+claim within minutes.
+
+The sequence on
+`add/premium-analytics-line-chart` (commit `dd52a32094`):
+
+1. `Write` placed
+   `import '@automattic/charts/style.css'; // eslint-disable-line import/no-unresolved -- ...`
+   in `stage.tsx` alongside three other new imports.
+2. `git commit` ran the pre-commit pipeline (Prettier formatting, then
+   `eslint --fix` via `lint-file` on the three staged files).
+3. `git show HEAD -- ...stage.tsx` revealed the import line was
+   present but the inline directive **was gone**.
+
+A follow-up commit (`e60c87ea93`) re-added the comment manually. That
+commit's pre-commit pass left the directive intact — most plausibly
+because the only change in that commit was the comment itself; the
+strip mechanism (whatever it is) seems to require a broader rewrite
+in the same pass.
+
+### The pie chart branch never actually shipped the inline form either
+
+While investigating Round 5, `git log --all -S 'eslint-disable-line
+import/no-unresolved' --oneline -- projects/packages/premium-analytics/routes/dashboard/stage.tsx`
+returned a single commit: `e60c87ea93` (the Round 5 follow-up
+above). No commit on `fork/add/premium-analytics-pie-chart` —
+the branch whose review cycle drove Rounds 1–4 — ever contained the
+inline directive in `stage.tsx`. `git show
+fork/add/premium-analytics-pie-chart:.../stage.tsx` confirms it: the
+import is there, the directive is not.
+
+Implication: the Round 2 conclusion that "the inline form survived
+the pipeline" appears to have been a misread of the local working
+tree at the time, never re-verified against the committed file.
+Rounds 3–4's confident claims about *why* the inline form was robust
+were therefore built on a load-bearing observation that turned out
+to be wrong.
+
+## Updated discipline (post-Round 5)
 
 1. **Spec-as-source-of-truth for future agents** means we can't encode
    wrong mechanisms even when the practical fix happens to work — the
    wrong mechanism propagates into the next agent's mental model.
-2. **The inline-vs-next-line choice is load-bearing**, but the *reason*
-   it's load-bearing is observed, not understood. That's OK to ship
-   provided we say so explicitly.
+   Round 5 demonstrates this directly: the Round 4 "inline is robust"
+   claim survived because nobody re-read the committed file, and the
+   first agent run under the spec immediately tripped it.
+2. **Both forms are unreliable across pre-commit, and we still don't
+   understand the mechanism.** The inline-vs-next-line distinction is
+   no longer load-bearing; both have been observed to strip. The
+   load-bearing thing is the *post-commit verification step* — `git
+   show HEAD -- <file>` and re-add if missing.
 3. **Multi-round Copilot review is genuinely useful** for spec
-   correctness, not just code. Two of the four rounds caught
-   wrong-but-plausible mechanism claims that would otherwise have
-   become baked-in wisdom.
+   correctness, not just code. Two of the original four rounds caught
+   wrong-but-plausible mechanism claims; Round 5 (a dogfood, not a
+   Copilot round) caught the residual wrong observation that survived
+   all four.
+4. **Dogfood-as-validation actually fires.** PR #48 (the spec change)
+   was designed to be gated by a real implement-task run before merge.
+   That run (RSM-3713 / PR #49) falsified a load-bearing spec claim
+   within the first commit. The two-PR-stack pattern was the difference
+   between "ship the wrong spec" and "catch the wrong spec".
 
 ## Why this file exists
 
-The invariant ("use inline `eslint-disable-line`") lives in
-[`../../AGENTS.md`](../../AGENTS.md). It would be a one-liner there if
-someone discovered it from scratch, but in practice the wrong forms
-look reasonable and the team has already burned cycles on each of
-them. This file is the receipt — if a future implementer or reviewer
-proposes switching to `eslint-disable-next-line` thinking "the agents
-just got confused", they can find here a concrete account of which
-specific guesses turned out to be wrong and why the team stopped
-trying to explain the mechanism.
+The current invariant ("both forms strip; verify after commit, re-add
+if missing") lives in [`../../AGENTS.md`](../../AGENTS.md) →
+"Common patterns and pitfalls" → "ESLint patterns". It would be a
+one-liner there if someone discovered it from scratch, but in practice
+this team has now burned five rounds on the question. This file is
+the receipt — if a future implementer or reviewer proposes "let's
+just use the inline form and skip the post-commit check", they can
+find here a concrete account of how each prior shortcut failed, and
+why the only durable fix (so far) is the verification step itself.
 
 ---
 
