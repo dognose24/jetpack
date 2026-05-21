@@ -238,17 +238,23 @@ filesystem states:
 config:
 
 ```js
-// tools/js-tools/eslintrc/base.mjs:251-266
+// tools/js-tools/eslintrc/base.mjs:251-266 (verbatim)
 settings: {
-  'import/extensions': javascriptFiles.map( v => v.replace( '**/*', '' ) )...,
-  'import/resolver': {
-    typescript: {
-      project: tsconfigPath,
-      conditionNames: [ ...envConditionNames, ...defaultConditionNames ],
-      ...
-    },
-  },
-},
+	'import/extensions': javascriptFiles
+		.map( v => v.replace( '**/*', '' ) )
+		.filter( v => v !== '.svelte' ),
+	'import/internal-regex': '^jetpack-js-tools/',
+	'import/resolver': {
+		typescript: {
+			project: tsconfigPath,
+			conditionNames: [ ...envConditionNames, ...defaultConditionNames ],
+			alias: {
+				// These somehow confuse import/named (maybe they're outdated or incomplete?), alias them to nothing.
+				'@types/lodash': [ null ],
+				'@types/wordpress__block-editor': [ null ],
+			},
+		},
+	},
 ```
 
 The resolver is `eslint-import-resolver-typescript`, which only
@@ -290,9 +296,9 @@ the import bare:
 import '@automattic/charts/style.css';
 ```
 
-No post-commit verification step. No follow-up commit. The PR #50 PR
-description and DoD verification comment record this finding
-inline; the AGENTS.md "ESLint patterns" section is updated to match.
+No post-commit verification step. No follow-up commit. The PR #50
+description and DoD verification comment record this finding inline;
+the AGENTS.md "ESLint patterns" section is updated to match.
 
 ### Lessons (revised)
 
