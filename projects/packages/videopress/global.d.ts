@@ -7,4 +7,35 @@ export declare global {
 			apiFetch?: ( options: Record< string, any > ) => Promise< Response >;
 		};
 	}
+
+	const JPVIDEOPRESS_INITIAL_STATE:
+		| undefined
+		| {
+				API: {
+					WP_API_root: string;
+					WP_API_nonce: string;
+					contentNonce: string;
+				};
+				jetpackStatus: {
+					calypsoSlug: string;
+				};
+				product: {
+					slug: string;
+				};
+				siteData: {
+					id: number | string;
+					title: string;
+					adminUrl: string;
+					slug: string;
+					gmtOffset: number;
+					timezoneString: string;
+					locale: string;
+					hasVideoPressAccess: boolean;
+					isVideoPress1TB?: boolean;
+					isVideoPressUnlimited?: boolean;
+				};
+				assets: {
+					buildUrl: string;
+				};
+		  };
 }

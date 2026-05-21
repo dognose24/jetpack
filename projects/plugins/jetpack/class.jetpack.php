@@ -7,6 +7,7 @@
  * @package automattic/jetpack
  */
 
+use Automattic\Jetpack\Activity_Log\Jetpack_Activity_Log as Activity_Log_Init;
 use Automattic\Jetpack\Assets;
 use Automattic\Jetpack\Boost_Speed_Score\Speed_Score;
 use Automattic\Jetpack\Config;
@@ -32,6 +33,7 @@ use Automattic\Jetpack\Paths;
 use Automattic\Jetpack\Plugin\Deprecate;
 use Automattic\Jetpack\Plugin\Tracking as Plugin_Tracking;
 use Automattic\Jetpack\Redirect;
+use Automattic\Jetpack\Scan_Page\Jetpack_Scan as Scan_Page_Init;
 use Automattic\Jetpack\Status;
 use Automattic\Jetpack\Status\Host;
 use Automattic\Jetpack\Status\Visitor;
@@ -869,6 +871,8 @@ class Jetpack {
 	public function late_initialization() {
 		add_action( 'after_setup_theme', array( 'Jetpack', 'load_modules' ), -2 );
 		My_Jetpack_Initializer::init();
+		Activity_Log_Init::initialize();
+		Scan_Page_Init::initialize();
 
 		// Initialize Boost Speed Score
 		new Speed_Score( array(), 'jetpack-dashboard' );
@@ -2673,7 +2677,7 @@ p {
 		if ( $plugins_path === $referer['path'] ) {
 			$source_type = 'list';
 		} elseif ( $plugins_install_path === $referer['path'] ) {
-			$tab = isset( $query_parts['tab'] ) ? $query_parts['tab'] : 'featured';
+			$tab = $query_parts['tab'] ?? 'featured';
 			switch ( $tab ) {
 				case 'popular':
 					$source_type = 'popular';
@@ -2685,8 +2689,8 @@ p {
 					$source_type = 'favorites';
 					break;
 				case 'search':
-					$source_type  = 'search-' . ( isset( $query_parts['type'] ) ? $query_parts['type'] : 'term' );
-					$source_query = isset( $query_parts['s'] ) ? $query_parts['s'] : null;
+					$source_type  = 'search-' . ( $query_parts['type'] ?? 'term' );
+					$source_query = $query_parts['s'] ?? null;
 					break;
 				default:
 					$source_type = 'featured';
@@ -3398,7 +3402,7 @@ p {
 		}
 
 		$uploaded_files = array();
-		$global_post    = isset( $GLOBALS['post'] ) ? $GLOBALS['post'] : null;
+		$global_post    = $GLOBALS['post'] ?? null;
 		unset( $GLOBALS['post'] );
 		if ( empty( $_FILES['media']['name'] ) ) {
 			// Nothing to process, just return.
@@ -3407,7 +3411,7 @@ p {
 		foreach ( $_FILES['media']['name'] as $index => $name ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- As above, unslash sniff is wrong. Validation should happen below.
 			$file = array();
 			foreach ( $media_keys as $media_key ) {
-				$file[ $media_key ] = isset( $_FILES['media'][ $media_key ][ $index ] ) ? $_FILES['media'][ $media_key ][ $index ] : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- As above, the unslash sniff is wrong.
+				$file[ $media_key ] = $_FILES['media'][ $media_key ][ $index ] ?? null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash,,WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- As above, the unslash sniff is wrong.
 			}
 
 			list( $hmac_provided, $salt ) = isset( $_POST['_jetpack_file_hmac_media'][ $index ] ) ? explode( ':', filter_var( wp_unslash( $_POST['_jetpack_file_hmac_media'][ $index ] ) ) ) : array( 'no', '' ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- Nonce should have been checked by the caller.

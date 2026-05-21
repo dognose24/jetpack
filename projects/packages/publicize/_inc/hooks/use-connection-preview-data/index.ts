@@ -2,16 +2,22 @@ import { siteHasFeature } from '@automattic/jetpack-script-data';
 import { useSelect } from '@wordpress/data';
 import { store as editorStore } from '@wordpress/editor';
 import { useMemo } from 'react';
-import { Connection } from '../../social-store/types';
-import { features, PREVIEW_BODY_CHAR_LIMITS } from '../../utils';
+import { store as socialStore } from '../../social-store';
+import { features } from '../../utils';
 import useMediaDetails from '../use-media-details';
 import { usePerNetworkCustomization } from '../use-per-network-customization';
 import { usePostMeta } from '../use-post-meta';
-import useRenderedMessage from '../use-rendered-message';
+import { useRenderMessageInputs } from '../use-render-message-items';
 import useSigPreview from '../use-sig-preview';
 import useSocialMediaMessage from '../use-social-media-message';
 import { useSocialPreviewPostData } from '../use-social-preview-post-data';
-import { PostPreviewData } from '../use-social-preview-post-data/types';
+import type { Connection } from '../../social-store/types';
+import type { PostPreviewData } from '../use-social-preview-post-data/types';
+
+export type ConnectionPreviewData = PostPreviewData & {
+	message: string;
+	isLoading: boolean;
+};
 
 /**
  * Returns the post data needed for the preview of a specific connection.
@@ -19,7 +25,7 @@ import { PostPreviewData } from '../use-social-preview-post-data/types';
  * @param {Connection} connection - The connection.
  * @return The post data.
  */
-export function useConnectionPreviewData( connection: Connection ) {
+export function useConnectionPreviewData( connection: Connection ): ConnectionPreviewData {
 	const { isEnabled: usingPerNetworkCustomization } = usePerNetworkCustomization();
 	const { mediaSource: globalMediaSource } = usePostMeta();
 
@@ -42,10 +48,6 @@ export function useConnectionPreviewData( connection: Connection ) {
 		( connection.media_source === 'sig' || globalMediaSource === 'sig' );
 
 	const sig = useSigPreview( generateSigPreview );
-
-	// Effective message to render: per-connection override when set, else global.
-	// Empty string tells the backend to use the per-network default template.
-	const effectiveMessage = ( connection.message ?? globalMessage ?? '' ).trim();
 
 	const isPerNetworkMode =
 		siteHasFeature( features.ENHANCED_PUBLISHING ) && usingPerNetworkCustomization;
@@ -88,30 +90,66 @@ export function useConnectionPreviewData( connection: Connection ) {
 	] );
 
 	const templatesEnabled = siteHasFeature( features.MESSAGE_TEMPLATES );
-	const { rendered } = useRenderedMessage( {
-		enabled: templatesEnabled,
-		postId: postId ?? 0,
-		network: connection.service_name ?? '',
-		message: effectiveMessage,
-		isSocialPost: media.length > 0,
-		charLimit: PREVIEW_BODY_CHAR_LIMITS[ connection.service_name ?? '' ],
-	} );
+	const { items, postIntent } = useRenderMessageInputs();
+	const siteMessageTemplate = useSelect(
+		select =>
+			templatesEnabled ? select( socialStore ).getSocialSettings().messageTemplate ?? '' : '',
+		[ templatesEnabled ]
+	);
+	/*
+	 * Mirror `useRenderMessageItems` exactly: in per-network mode fall back to
+	 * the saved site template (not `globalMessage`) when the connection has no
+	 * per-post override; in global mode use `globalMessage`. Keeping this
+	 * identical to the items array's rule ensures `currentRenderItem.message`
+	 * matches `baseMessage` and `isDebouncingRenderedMessage` doesn't stay
+	 * stuck true.
+	 */
+	const baseMessage = (
+		isPerNetworkMode ? connection.message ?? siteMessageTemplate : globalMessage
+	).trim();
+	const currentRenderItem = items.find( item => item.connection_id === connection.connection_id );
+
+	const { rendered, isLoadingRendered } = useSelect(
+		select => {
+			if ( ! templatesEnabled || ! postId ) {
+				return { rendered: null, isLoadingRendered: false };
+			}
+			// Read from the cache-only selector so this hook does not trigger requests.
+			// Fetches are driven centrally by `useDriveRenderedMessagesFetch`.
+			const social = select( socialStore );
+			const batch = social.getCachedRenderedMessages( postId, items, postIntent );
+
+			return {
+				rendered: batch?.[ connection.connection_id ]?.rendered_message ?? null,
+				isLoadingRendered: social.isLoadingRenderedMessages( postId, items, postIntent ),
+			};
+		},
+		[ templatesEnabled, postId, items, postIntent, connection.connection_id ]
+	);
+
+	// True while the user has typed but the debounced items array hasn't caught
+	// up yet — the store doesn't see edits until items are committed, so the
+	// consumer has to compute this itself.
+	const isDebouncingRenderedMessage =
+		templatesEnabled &&
+		baseMessage.length > 0 &&
+		currentRenderItem?.message !== undefined &&
+		currentRenderItem.message !== baseMessage;
 
 	return useMemo( () => {
 		const useRendered = templatesEnabled && typeof rendered === 'string';
-		const baseMessage = isPerNetworkMode
-			? ( connection.message ?? globalMessage ).trim()
-			: globalMessage.trim();
+		const isLoading = templatesEnabled && ( isDebouncingRenderedMessage || isLoadingRendered );
 
 		return {
 			...postData,
 			message: useRendered ? rendered : baseMessage,
 			media,
+			isLoading,
 		};
 	}, [
-		connection.message,
-		globalMessage,
-		isPerNetworkMode,
+		baseMessage,
+		isDebouncingRenderedMessage,
+		isLoadingRendered,
 		media,
 		postData,
 		rendered,

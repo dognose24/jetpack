@@ -706,7 +706,7 @@ async function buildProject( t ) {
 	// We don't need to `composer install` if it's a CI build of a non-plugin with no build script. Except for changelogger.
 	const skipInstall = t.argv.forMirrors && script === null && ! t.project.startsWith( 'plugins/' );
 
-	if ( t.argv.forMirrors && ! skipInstall ) {
+	if ( t.argv.forMirrors ) {
 		// Mirroring needs to munge the project's composer.json to point to the built files..
 		const idx = composerJson.repositories?.findIndex( r => r.options?.monorepo );
 		if ( typeof idx === 'number' && idx >= 0 ) {
@@ -755,8 +755,8 @@ async function buildProject( t ) {
 					JSON.stringify( composerJson, null, '\t' ) + '\n',
 					{ encoding: 'utf8' }
 				);
-				// Update composer.lock too, if any.
-				if ( await fsExists( `${ t.cwd }/composer.lock` ) ) {
+				// Update composer.lock too, if any and if we're installing.
+				if ( ! skipInstall && ( await fsExists( `${ t.cwd }/composer.lock` ) ) ) {
 					await t.execa( 'composer', [ 'update', '--no-install', ...Object.keys( versions ) ], {
 						cwd: t.cwd,
 						stdio: [ 'ignore', 'inherit', 'inherit' ],
@@ -811,6 +811,7 @@ async function buildProject( t ) {
 
 	// Copy standard .github.
 	await copyDirectory( '.github/files/mirror-.github', npath.join( buildDir, '.github' ) );
+	await fs.unlink( npath.join( buildDir, '.github/.gitkeep' ) );
 
 	// Copy autotagger, autorelease, wp-svn-autopublish, and/or npmjs-autopublisher if enabled.
 	if ( composerJson.extra?.autotagger ) {
@@ -1002,13 +1003,29 @@ async function buildProject( t ) {
 		await fs.writeFile( `${ buildDir }/.npmignore`, ignore, { encoding: 'utf8' } );
 	}
 
-	// If autorelease is active, flag .git files to be excluded from the archive.
-	if ( composerJson.extra?.autorelease ) {
+	// Flag .git* files to be excluded from the archive, and strip any production-exclude and production-include attributes.
+	{
 		let rules = '# Automatically generated rules.\n/.git*\texport-ignore\n';
 		if ( await fsExists( `${ buildDir }/.gitattributes` ) ) {
-			rules +=
-				'\n# Package attributes file.\n' +
-				( await fs.readFile( `${ buildDir }/.gitattributes`, { encoding: 'utf8' } ) );
+			const pkgrules = ( await fs.readFile( `${ buildDir }/.gitattributes`, { encoding: 'utf8' } ) )
+				.split( /(?<=\n)/ )
+				.reduce(
+					( [ kept, pending ], line ) => {
+						if ( /^\s*$|^#/.test( line ) ) {
+							pending += line;
+							return [ kept, pending ];
+						}
+						if ( ! /\sproduction-(?:include|exclude)\s*$/.test( line ) ) {
+							kept += pending + line;
+						}
+						return [ kept, '' ];
+					},
+					[ '', '' ]
+				)[ 0 ]
+				.replace( /\n\n+|\n*$/g, '\n' );
+			if ( ! pkgrules.match( /^\s*$/ ) ) {
+				rules += '\n# Package attributes file.\n' + pkgrules;
+			}
 		}
 		await fs.writeFile( `${ buildDir }/.gitattributes`, rules, { encoding: 'utf8' } );
 	}
