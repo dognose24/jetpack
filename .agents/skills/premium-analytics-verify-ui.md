@@ -76,9 +76,20 @@ work is what Step 2 waits for.
 
 ## Step 2 — Wait for wpcli setup to complete
 
-wpcli runs `wp core install` and `wp plugin activate gutenberg` on startup
-and only reaches `sleep infinity` after success. Probe `wp core
-is-installed` until it returns 0:
+wpcli's startup command (see `tools/ai-sandbox/docker-compose.yml`) runs
+two sequential steps before reaching `sleep infinity`:
+
+```sh
+wp core is-installed || wp core install ...                   # step A
+wp plugin is-active gutenberg || { wp plugin install ... && wp plugin activate gutenberg; }   # step B
+sleep infinity
+```
+
+Probing `wp core is-installed` only confirms step A — step B's plugin
+activation runs after, and Step 3's Playwright suite needs Gutenberg
+active (premium-analytics' admin page uses Gutenberg APIs). Probe `wp
+plugin is-active gutenberg` instead: it returns 0 only after step B
+completes, which implies step A also did (sequential):
 
 ```bash
 # Resolve the wpcli container name. Two cases:
@@ -98,7 +109,7 @@ WPCLI="jetpack-ai-wpcli${WP_VERIFY_INSTANCE:+-${WP_VERIFY_INSTANCE}}"
 
 echo "Waiting for wpcli setup to complete (target: $WPCLI)..."
 TRIES=0
-until docker exec "$WPCLI" wp core is-installed --allow-root 2>/dev/null; do
+until docker exec "$WPCLI" wp plugin is-active gutenberg --allow-root 2>/dev/null; do
   TRIES=$((TRIES + 1))
   [ $TRIES -gt 20 ] && echo "wpcli setup did not complete in time" && exit 1
   sleep 5
