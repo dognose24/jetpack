@@ -1,5 +1,5 @@
 import { LineChartUnresponsive } from '@automattic/charts';
-import '@automattic/charts/style.css';
+import '@automattic/charts/style.css'; // eslint-disable-line import/no-unresolved -- CSS subpath; dist/index.css is gitignored
 import { __ } from '@wordpress/i18n';
 import type { SeriesData } from '@automattic/charts';
 
