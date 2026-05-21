@@ -1,6 +1,7 @@
 ---
 description: >
-  Implement a premium-analytics task end-to-end: read the task md, create a branch from
+  Implement a premium-analytics task end-to-end: read the task spec (Linear issue —
+  see "Input" below for the in-flight transition from task md), create a branch from
   fork/trunk, implement, build, run UI verification (default backend: wp-verify
   Playwright in jetpack-ai-sandbox; override via `VERIFY_SKILL` env var for non-sandbox
   backends), add a changelog entry, push, open a PR, start the review cycle, and audit
@@ -10,8 +11,8 @@ allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Ba
 
 # premium-analytics Implement Task
 
-Implement a premium-analytics task from a task md file through to an open PR with review
-cycle started. The default verify backend (`/premium-analytics-verify-ui`) requires
+Implement a premium-analytics task from spec to an open PR with review cycle
+started. The default verify backend (`/premium-analytics-verify-ui`) requires
 `jetpack-ai-sandbox` with the Docker socket mounted; alternative backends supplied via
 the `VERIFY_SKILL` env var (Step 4) carry their own environment requirements. Steps
 unrelated to verify (git operations, build, changelog, PR creation, review cycle) run
@@ -19,13 +20,22 @@ the same way regardless of backend.
 
 ## Input
 
-The task md path is passed as the skill argument, e.g.:
+**Target state (Phase 2, not yet landed):** the skill takes a Linear issue
+identifier (e.g. `RSM-1234`) as its argument and reads the spec directly from
+the issue description via the `linear/issue` MCP tool. The Linear issue
+contract is documented in
+`projects/packages/premium-analytics/AGENTS.md` → "Linear issue contract".
 
-```
-/premium-analytics-implement-task projects/packages/premium-analytics/tasks/dashboard-line-chart.md
-```
+**Transition state (today):** task md files under
+`projects/packages/premium-analytics/tasks/` have been removed (Linear-first
+restructure). Until the Phase 2 refactor lands, the human caller manually
+translates the Linear issue description into the steps below — feeding scope,
+implementation details, and DoD from the issue body. Either copy-paste the
+issue description into the agent session, or save it to a local scratch path
+and pass that path to the skill as a stopgap.
 
-Read the task md fully before starting.
+The Phase 2 work is tracked separately; until then this skill should be
+treated as semi-manual at the spec-fetching step.
 
 ## Pre-flight
 

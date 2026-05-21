@@ -61,8 +61,9 @@ build/                         generated — never edit manually
 
 The dashboard is being built in two phases:
 
-- **Phase 1** (`tasks/dashboard-line-chart.md`): UI-only, hardcoded mock data.
-  No data fetching is permitted.
+- **Phase 1**: UI-only, hardcoded mock data. No data fetching is permitted.
+  Individual chart / settings tasks are tracked in Linear, not as task md
+  files in this repo (see "Linear issue contract" section below).
 - **Phase 2** (task not yet written): Consume `GET /jetpack/v4/stats/blog`
   (already registered by `projects/packages/stats/`).
   Route-local `useStats()` hook via `@wordpress/api-fetch` is allowed.
@@ -135,3 +136,111 @@ Address all open comments, commit, and push. Then leave a summary comment on the
 - Introducing data fetching that targets an endpoint NOT listed in `projects/packages/stats/`
 - Introducing a `@wordpress/data` store shared across more than one route
 - Any persistence, write operations, or analytics event tracking
+
+---
+
+## Common patterns and pitfalls
+
+Invariants discovered through implementation that the next agent should
+know up front, so individual task issues don't re-explain the rationale.
+
+### `@automattic/charts` usage
+
+- **Use `*Unresponsive` chart variants** (`PieChartUnresponsive`,
+  `LineChartUnresponsive`, etc.) when the parent container does not have
+  a fixed height. The responsive wrappers use `withResponsive` +
+  `useParentSize` to measure their parent, which feedback-loops with
+  `ChartLayout`'s internal `ResizeObserver` and causes infinite vertical
+  growth.
+
+- **`withTooltips` prop is required** if hover/tooltip Playwright specs
+  are part of the task's DoD. Without it the chart skips its mouse
+  handlers and the tooltip portal never renders, so any tooltip
+  assertion fails vacuously.
+
+- **CSS subpath import is required**: `import '@automattic/charts/style.css';`
+  must be present in the route that renders the chart. The package does
+  not auto-inject styles. Without it, `ChartLayout`'s `ResizeObserver`
+  measures inline-SVG descender space and the chart height drifts
+  upward on each cycle.
+
+- **The CSS import needs an inline `eslint-disable-line` directive** —
+  not `eslint-disable-next-line`. See "ESLint patterns" below for the
+  why; the full forensic trail lives in
+  [`docs/research/eslint-disable-line-discovery.md`](docs/research/eslint-disable-line-discovery.md).
+
+### ESLint patterns
+
+`@automattic/charts/style.css` is a subpath export that resolves to
+`dist/index.css`, which is gitignored and not built during the ESLint CI
+step, so `import/no-unresolved` fires on the import. The standard fix is
+to disable that rule for the line:
+
+```ts
+import '@automattic/charts/style.css'; // eslint-disable-line import/no-unresolved -- CSS subpath; dist/index.css is gitignored
+```
+
+**Use the inline form** (`eslint-disable-line` at the end of the import
+line), not `eslint-disable-next-line` on the line above. The pre-commit
+lint pipeline reorders imports under `import/order` (newlines-between
+disabled, alphabetic ordering enforced by
+`tools/js-tools/eslintrc/base.mjs:318-325`), and the standalone
+next-line comment has been observed to disappear during that pass in
+multiple sandbox runs. The trailing-on-the-same-line form travels with
+the import token, so reordering doesn't separate them.
+
+### `@wordpress/boot` shim
+
+`shims/boot-asset.php` is a compatibility shim copied into
+`build/modules/boot/index.min.asset.php` during build. **Do not remove
+or modify the shim copy step** — without it the boot chain fails to
+register the admin page.
+
+---
+
+## Linear issue contract for `/premium-analytics-implement-task`
+
+This package's `tasks/` directory is gone. Tasks live in Linear issues;
+the implement-task skill reads the issue directly (Phase 2 — see the
+skill's docstring for current status / transition state). Until Phase 2
+lands, a human will manually translate the issue description into a
+form the skill can consume.
+
+A Linear issue picked up by the skill must contain these sections in
+its description.
+
+### Required
+
+1. **What** — 1-3 sentences: current state → end state.
+2. **Scope** — bulleted list of files the implementation may touch
+   (paths relative to repo root). The skill enforces this as the single
+   source of truth for what the task may modify.
+3. **Implementation** — what to add or change, with the exact code /
+   values where they matter. Reasoning for non-obvious choices should
+   link back to the relevant section in this AGENTS.md, not be inlined.
+4. **Definition of done** — two sub-lists:
+   - *Agent-verifiable* — build, `/premium-analytics-verify-ui`, any
+     regression-injection acceptance items.
+   - *Human-verifiable* — visual / functional checks for PR review.
+5. **Submitting** — branch name to create (e.g. `add/<topic>`) and the
+   exact `pnpm jetpack changelogger add` command + entry.
+
+### Recommended
+
+- A short "Background" or "Why" paragraph if the task isn't
+  self-explanatory.
+- Links to related Linear issues / RFCs / Slack threads.
+
+### What NOT to include
+
+- **Implementation rationale.** Reasoning about *why* a particular
+  library / API / pattern is being used is an invariant; it belongs in
+  the "Common patterns and pitfalls" section above (so all task issues
+  benefit, not just this one). If the rationale doesn't exist there
+  yet, capture it during implementation via Step 10 of the
+  implement-task skill.
+- **Boilerplate constraints** that apply to every task in this package
+  (no real endpoints in Phase 1, no `build/` edits, etc.). They live in
+  the "Allowed without approval" / "Never do" sections above.
+- **Session Report** template content. The skill fills that in
+  automatically when it opens the PR.
