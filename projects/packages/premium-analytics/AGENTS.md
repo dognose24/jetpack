@@ -200,22 +200,26 @@ against both filesystem states (with `dist/index.css` present and with
 it moved aside) — exit 0, no warnings in both.
 
 Practical consequence: any `eslint-disable-line import/no-unresolved`
-comment on this import is genuinely *unused*. ESLint's v9/v10 default
+comment on this import is genuinely *unused*. ESLint 9's default
 `linterOptions.reportUnusedDisableDirectives` reports unused disable
 directives as warnings, and pre-commit `lint-file --max-warnings=0
 --fix` autofixes them — the comment gets stripped on the initial
 commit AND on a directive-only follow-up commit (verified on PR #50
-where the follow-up landed empty). The literal warning text seen in
-pre-commit output:
+where the follow-up landed empty). The relevant warning text from
+`pnpm run lint-file` (full output reproduced in
+`docs/research/eslint-disable-line-discovery.md` → Round 6):
 
 ```
-warning  Unused eslint-disable directive
-  (no problems were reported from 'import/no-unresolved')
+projects/packages/premium-analytics/routes/dashboard/stage.tsx
+  2:40  warning  Unused eslint-disable directive
+        (no problems were reported from 'import/no-unresolved')
+✖ 1 problem (0 errors, 1 warning)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
 ```
 
 This rules out the Round 5 conclusion that
 `reportUnusedDisableDirectives` was not the mechanism — the option is
-enabled by default in modern ESLint regardless of whether any config
+enabled by default in ESLint 9 regardless of whether any config
 explicitly sets it.
 
 **Operational rule:** write the import bare. Do not add a disable

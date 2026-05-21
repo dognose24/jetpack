@@ -261,11 +261,25 @@ without the directive to check whether the rule fires; everyone
 assumed it did because the task md said so.
 
 The Round 5 search of full history for `eslint-disable-line
-import/no-unresolved` returning only `e60c87ea93` is consistent with
-this: the directive has never survived a commit on this codebase
-because it has always been unused, and pre-commit has always stripped
-it. The "shipping pie chart works without the directive" observation
-isn't a contradiction — it never needed the directive.
+import/no-unresolved` returning only `e60c87ea93` is *almost*
+consistent with this. The dominant pattern across every other commit
+that touched this import is "directive absent" — either never written,
+or written and stripped. `e60c87ea93` itself is a single-commit
+anomaly: at that one commit the directive *did* make it through
+pre-commit. The likely cause is that immediately before the commit the
+agent had manually run `rm projects/js-packages/charts/dist/index.css`
+and `pnpm run lint-file --fix`, which could have changed which warnings
+fired at lint time; the recorded pre-commit hook output for that
+commit shows only Prettier output, hinting `lint-file --fix` may not
+have re-run on the staged file. The exact bypass mechanism wasn't
+isolated, and it isn't reproducible from the current spec — every
+subsequent commit under normal pre-commit flow has stripped the
+directive. The dominant rule (strip) holds; `e60c87ea93` is noted here
+so a future investigator looking at history doesn't think it
+contradicts Round 6.
+
+The "shipping pie chart works without the directive" observation isn't
+a contradiction either — it never needed the directive.
 
 ### Updated invariant (post-Round 6)
 
