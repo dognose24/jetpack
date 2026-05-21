@@ -39,12 +39,15 @@ required sections (What, Scope, Implementation, DoD, Submitting) and
 their expected structure. The scratch file is throwaway — `/tmp/` keeps
 it out of the repo automatically.
 
-A typical stopgap flow:
+A typical stopgap flow has two steps in two different surfaces — a
+shell command to write the scratch file, then a slash-command inside
+the Claude session.
+
+**1. In a shell**, save the Linear issue description to the scratch
+path. How you fetch the description is up to the caller — Linear web
+UI copy/paste, MCP `linear/issue` tool, an Automattic CLI, etc.:
 
 ```bash
-# Fetch the Linear issue description and save it to a scratch path.
-# (How you fetch is up to the caller — Linear web UI copy/paste, MCP
-# linear/issue tool, an Automattic CLI, etc.)
 cat > /tmp/RSM-1234.md <<'EOF'
 # Task: Add device-types pie chart to dashboard
 
@@ -54,8 +57,11 @@ cat > /tmp/RSM-1234.md <<'EOF'
 ## Scope
 …
 EOF
+```
 
-# Then invoke the skill with the scratch path.
+**2. In the Claude session**, invoke the skill with the scratch path:
+
+```text
 /premium-analytics-implement-task /tmp/RSM-1234.md
 ```
 
