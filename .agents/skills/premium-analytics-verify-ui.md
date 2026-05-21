@@ -92,13 +92,17 @@ plugin is-active gutenberg` instead: it returns 0 only after step B
 completes, which implies step A also did (sequential):
 
 ```bash
-# Resolve the wpcli container name. Two cases:
-# 1. Caller exported WP_VERIFY_INSTANCE — use it directly.
-# 2. Caller is inside a suffixed sandbox container without the env var
-#    set (compose doesn't propagate WP_VERIFY_INSTANCE into the
-#    container's runtime env). Read the current container's compose
-#    project label and back-derive the instance — same approach
-#    wp-verify.sh uses for its own in-sandbox reconciliation.
+# Resolve the wpcli container name. Three cases:
+# 1. Caller exported WP_VERIFY_INSTANCE explicitly — use it directly.
+# 2. Inside a *suffixed* sandbox container with WP_VERIFY_INSTANCE
+#    unset (compose doesn't propagate the env var into the container's
+#    runtime env). Read the current container's compose project label
+#    and back-derive the instance — same approach wp-verify.sh uses for
+#    its own in-sandbox reconciliation.
+# 3. On the host, or inside the default unsuffixed sandbox container.
+#    Neither check below applies; WP_VERIFY_INSTANCE stays empty, the
+#    suffix expansion below is empty, and the target is the historical
+#    unsuffixed `jetpack-ai-wpcli` container.
 if [ -z "${WP_VERIFY_INSTANCE:-}" ] && [ -f /.dockerenv ]; then
   PROJECT=$(docker inspect "$HOSTNAME" --format '{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)
   case "$PROJECT" in
