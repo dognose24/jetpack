@@ -217,7 +217,7 @@ projects/packages/premium-analytics/routes/dashboard/stage.tsx
   0 errors and 1 warning potentially fixable with the `--fix` option.
 ```
 
-This rules out the Round 5 conclusion that
+This rules out the Round 4 conclusion that
 `reportUnusedDisableDirectives` was not the mechanism — the option is
 enabled by default in ESLint 9 regardless of whether any config
 explicitly sets it.
