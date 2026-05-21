@@ -140,14 +140,23 @@ in the same pass.
 
 ### The pie chart branch never actually shipped the inline form either
 
-While investigating Round 5, `git log --all -S 'eslint-disable-line
-import/no-unresolved' --oneline -- projects/packages/premium-analytics/routes/dashboard/stage.tsx`
-returned a single commit: `e60c87ea93` (the Round 5 follow-up
-above). No commit on `fork/add/premium-analytics-pie-chart` —
-the branch whose review cycle drove Rounds 1–4 — ever contained the
-inline directive in `stage.tsx`. `git show
-fork/add/premium-analytics-pie-chart:.../stage.tsx` confirms it: the
-import is there, the directive is not.
+While investigating Round 5, this history-wide search:
+
+```bash
+git log --all -S 'eslint-disable-line import/no-unresolved' --oneline \
+  -- projects/packages/premium-analytics/routes/dashboard/stage.tsx
+```
+
+…returned a single commit: `e60c87ea93` (the Round 5 follow-up above).
+No commit on `fork/add/premium-analytics-pie-chart` — the branch whose
+review cycle drove Rounds 1–4 — ever contained the inline directive
+in `stage.tsx`. Confirming directly with:
+
+```bash
+git show fork/add/premium-analytics-pie-chart:projects/packages/premium-analytics/routes/dashboard/stage.tsx
+```
+
+…shows the import is there, the directive is not.
 
 Implication: the Round 2 conclusion that "the inline form survived
 the pipeline" appears to have been a misread of the local working

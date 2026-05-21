@@ -192,12 +192,17 @@ dogfood for [RSM-3713](https://linear.app/a8c/issue/RSM-3713) (PR #49)
 saw the inline form stripped on the initial commit
 (`dd52a32094`); a follow-up commit (`e60c87ea93`) re-added it, and
 because that commit only changed the directive (not surrounding
-imports), the strip didn't re-fire. A `git log --all -S 'eslint-disable-line
-import/no-unresolved'` on `routes/dashboard/stage.tsx` shows
-`e60c87ea93` is the *only* commit in repo history with the inline
-form — meaning the prior "inline form already ships in pie chart"
-assumption was unverified; no commit on `fork/add/premium-analytics-pie-chart`
-actually contained the directive either.
+imports), the strip didn't re-fire. Searching the full history:
+
+```bash
+git log --all -S 'eslint-disable-line import/no-unresolved' \
+  -- projects/packages/premium-analytics/routes/dashboard/stage.tsx
+```
+
+…returns only `e60c87ea93` — meaning the prior "inline form already
+ships in pie chart" assumption was unverified; no commit on
+`fork/add/premium-analytics-pie-chart` actually contained the
+directive either.
 
 The pre-commit pipeline runs Prettier and `eslint --fix` via
 `lint-file`. The `import/order` rule is configured with
