@@ -1,12 +1,13 @@
-# How the `@automattic/charts` CSS-import disable-and-verify rule was discovered
+# How the `@automattic/charts` CSS-import disable-directive turned out to be unnecessary
 
 Captured here because the path to the current invariant ran through
-five rounds of review — including a dogfood task that falsified the
-spec the prior four rounds had agreed on. The current invariant is
-**not** "use the inline form" (that was Rounds 2–4's wrong answer);
-it is "both forms can be stripped during pre-commit `lint-file --fix`,
-so verify with `git show HEAD -- <file>` after every commit that adds
-the import and re-add the directive in a follow-up if missing."
+six rounds of review — including two dogfood tasks that each
+falsified the spec the prior rounds had agreed on. The current
+invariant is **not** "use the inline form" (Rounds 2–4's wrong
+answer), and **not** "both forms strip so verify-and-re-add in a
+follow-up" (Round 5's wrong answer); it is **"the disable directive is
+unnecessary because `import/no-unresolved` does not fire on CSS
+subpath imports — write the import bare and never add a directive."**
 
 The invariant itself lives in
 [`../../AGENTS.md`](../../AGENTS.md) → "Common patterns and pitfalls" →
@@ -15,8 +16,9 @@ the team reached it, not what it is.
 
 Audience: agents and humans extending the chart-related code in this
 package. Read this only if you are touching the `@automattic/charts`
-CSS-import pattern itself, are about to propose an inline-vs-next-line
-shortcut, or are about to skip the verify-after-commit step.
+CSS-import pattern itself, are about to propose re-adding a disable
+directive, or are about to install a post-commit verification step
+for one.
 
 ---
 
@@ -29,13 +31,18 @@ import '@automattic/charts/style.css';
 ```
 
 The subpath resolves to `dist/index.css`, which is gitignored and not
-built during the ESLint CI step, so `import/no-unresolved` fires on
-the import in CI lint.
+built during the ESLint CI step. At the time, every contributor —
+including the task md author — assumed `import/no-unresolved` would
+therefore fire on the import in CI lint. Round 6 ultimately showed
+that assumption was wrong (the repo's TS import resolver doesn't
+evaluate CSS subpath imports at all), but Rounds 1–5 took that
+assumption as given.
 
 The task md (now removed; see [`../../AGENTS.md`](../../AGENTS.md) for
 the current canonical reference) initially told the agent to disable
 the rule. The form of the disable directive turned out to be
-load-bearing in a non-obvious way.
+load-bearing in a non-obvious way — until Round 6 showed the
+directive itself was the load that didn't need bearing.
 
 ## Round 1 — first attempt: `eslint-disable-next-line`
 
@@ -165,41 +172,146 @@ Rounds 3–4's confident claims about *why* the inline form was robust
 were therefore built on a load-bearing observation that turned out
 to be wrong.
 
-## Updated discipline (post-Round 5)
+## Round 6 — second host dogfood (PR #50 / [RSM-3726](https://linear.app/a8c/issue/RSM-3726)) falsifies "follow-up commit lets the comment through" and "the directive is needed at all"
 
-1. **Spec-as-source-of-truth for future agents** means we can't encode
-   wrong mechanisms even when the practical fix happens to work — the
-   wrong mechanism propagates into the next agent's mental model.
-   Round 5 demonstrates this directly: the Round 4 "inline is robust"
-   claim survived because nobody re-read the committed file, and the
-   first agent run under the spec immediately tripped it.
-2. **Both forms are unreliable across pre-commit, and we still don't
-   understand the mechanism.** The inline-vs-next-line distinction is
-   no longer load-bearing; both have been observed to strip. The
-   load-bearing thing is the *post-commit verification step* — `git
-   show HEAD -- <file>` and re-add if missing.
-3. **Multi-round Copilot review is genuinely useful** for spec
-   correctness, not just code. Two of the original four rounds caught
-   wrong-but-plausible mechanism claims; Round 5 (a dogfood, not a
-   Copilot round) caught the residual wrong observation that survived
-   all four.
-4. **Dogfood-as-validation actually fires.** PR #48 (the spec change)
-   was designed to be gated by a real implement-task run before merge.
-   That run (RSM-3713 / PR #49) falsified a load-bearing spec claim
-   within the first commit. The two-PR-stack pattern was the difference
-   between "ship the wrong spec" and "catch the wrong spec".
+The Round 5 update to AGENTS.md installed an operational rule: after
+`git commit`, run `git show HEAD -- <file>` and confirm the directive
+is on the import; if missing, re-add it in a follow-up commit, which
+"typically lets the comment through because nothing else is being
+rewritten."
+
+The first run under that updated spec — adding a top-pages bar chart
+on the host — falsified *both* halves of the rule.
+
+The sequence on `add/premium-analytics-bar-chart`:
+
+1. Initial commit `038bf1dc32` placed the import with the inline
+   directive. Pre-commit stripped it (expected per Round 5).
+2. Follow-up commit `53c62ddcbd` re-added *only* the directive (no
+   other change in the file). Pre-commit stripped it again — leaving
+   the follow-up commit literally empty (zero file changes). This is
+   the case Round 5 predicted "typically lets the comment through".
+
+### What the pre-commit pipeline actually emits
+
+Running the same pipeline locally (`pnpm run lint-file <file>`) with
+the directive in place produced this warning:
+
+```
+projects/packages/premium-analytics/routes/dashboard/stage.tsx
+  2:40  warning  Unused eslint-disable directive
+        (no problems were reported from 'import/no-unresolved')
+✖ 1 problem (0 errors, 1 warning)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+```
+
+The Husky pre-commit hook invokes `lint-file --max-warnings=0 --fix`
+(per the commit-time output: `JS issues detected and automatically
+fixed via eslint.`), so:
+
+- `--fix` autofixes the unused-directive warning (removes the
+  comment)
+- `--max-warnings=0` then sees zero warnings (since they were just
+  fixed) and exits 0
+- The strip is the autofix, not a separate reordering or formatter step
+
+This contradicts Round 4's conclusion that
+`reportUnusedDisableDirectives` was not the mechanism. Round 4
+correctly noted that the `lint-file` script doesn't pass
+`--report-unused-disable-directives` and no config explicitly sets
+`linterOptions.reportUnusedDisableDirectives`. But ESLint v9 enables
+this option by default (`'warn'`) regardless of whether any config
+mentions it, so the warning fires anyway. Round 4 missed the *implicit
+default*.
+
+### Why the directive was redundant in the first place
+
+Empirically — running `pnpm run lint-file <file>` against two
+filesystem states:
+
+1. With `dist/index.css` present (workspace charts package built) →
+   exit 0, no warnings.
+2. With `dist/index.css` moved aside (simulating the CI lint
+   environment, where charts isn't pre-built) → exit 0, no warnings.
+
+`import/no-unresolved` does not fire in either case. Reading the
+config:
+
+```js
+// tools/js-tools/eslintrc/base.mjs:251-266
+settings: {
+  'import/extensions': javascriptFiles.map( v => v.replace( '**/*', '' ) )...,
+  'import/resolver': {
+    typescript: {
+      project: tsconfigPath,
+      conditionNames: [ ...envConditionNames, ...defaultConditionNames ],
+      ...
+    },
+  },
+},
+```
+
+The resolver is `eslint-import-resolver-typescript`, which only
+resolves JS-like extensions. CSS subpath imports are outside its
+purview; `import/no-unresolved` simply does not evaluate them. Every
+prior round had been operating on an unverified premise — the
+*original* claim "`import/no-unresolved` fires on this import in CI"
+was never actually substantiated. None of Rounds 1–5 ran the lint
+without the directive to check whether the rule fires; everyone
+assumed it did because the task md said so.
+
+The Round 5 search of full history for `eslint-disable-line
+import/no-unresolved` returning only `e60c87ea93` is consistent with
+this: the directive has never survived a commit on this codebase
+because it has always been unused, and pre-commit has always stripped
+it. The "shipping pie chart works without the directive" observation
+isn't a contradiction — it never needed the directive.
+
+### Updated invariant (post-Round 6)
+
+The disable directive is **not needed and cannot be retained**. Write
+the import bare:
+
+```ts
+import '@automattic/charts/style.css';
+```
+
+No post-commit verification step. No follow-up commit. The PR #50 PR
+description and DoD verification comment record this finding
+inline; the AGENTS.md "ESLint patterns" section is updated to match.
+
+### Lessons (revised)
+
+The Round 5 lessons stand with one revision:
+
+1. (unchanged) **Spec-as-source-of-truth for future agents** means we
+   can't encode wrong mechanisms even when the practical fix happens
+   to work.
+2. **Both forms are unreliable AND unnecessary.** Round 5 framed the
+   directive as needed-but-fragile. Round 6 shows it was never needed.
+   The load-bearing thing is *not having a disable directive at all*.
+3. (unchanged) **Multi-round Copilot review is genuinely useful**…
+4. **Dogfood-as-validation actually fires — repeatedly.** PR #49
+   (Round 5) falsified Round 4's mechanism. PR #50 (Round 6)
+   falsified Round 5's operational rule. The pattern is robust: each
+   dogfood catches the latest wrong-but-plausible claim.
+5. **Verify the premise, not just the workaround.** Rounds 1–5 all
+   assumed `import/no-unresolved` fires on this import; nobody ran
+   `pnpm run lint-file <file>` without the directive to check.
+   Round 6 did, and the entire chain of reasoning collapsed.
 
 ## Why this file exists
 
-The current invariant ("both forms strip; verify after commit, re-add
-if missing") lives in [`../../AGENTS.md`](../../AGENTS.md) →
-"Common patterns and pitfalls" → "ESLint patterns". It would be a
-one-liner there if someone discovered it from scratch, but in practice
-this team has now burned five rounds on the question. This file is
-the receipt — if a future implementer or reviewer proposes "let's
-just use the inline form and skip the post-commit check", they can
-find here a concrete account of how each prior shortcut failed, and
-why the only durable fix (so far) is the verification step itself.
+The current invariant ("the directive is unnecessary; write the import
+bare; do not run a post-commit verification step") lives in
+[`../../AGENTS.md`](../../AGENTS.md) → "Common patterns and pitfalls"
+→ "ESLint patterns". It would be a one-liner there if someone
+discovered it from scratch, but in practice this team burned six
+rounds on the question — five chasing a workaround for a rule that
+doesn't fire. This file is the receipt: if a future implementer or
+reviewer proposes re-adding the directive (or any kind of post-commit
+verification step for it), they can find here a concrete account of
+how every prior assumption failed empirical testing.
 
 ---
 

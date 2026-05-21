@@ -166,60 +166,62 @@ know up front, so individual task issues don't re-explain the rationale.
   measures inline-SVG descender space and the chart height drifts
   upward on each cycle.
 
-- **The CSS import needs an `eslint-disable` directive — and both
-  forms have been observed to disappear during pre-commit
-  `lint-file --fix`.** Use either inline (`eslint-disable-line`) or
-  next-line (`eslint-disable-next-line`); after `git commit`, run
-  `git show HEAD -- <file>` and confirm the comment is still on the
-  import. If missing, re-add it in a follow-up commit. See "ESLint
-  patterns" below for details; the 5-round forensic trail lives in
+- **No `eslint-disable` directive on the CSS import.** Write the import
+  bare — `import '@automattic/charts/style.css';` with no trailing
+  comment. The repo's `import/no-unresolved` config does not fire on
+  CSS subpath imports (the TypeScript import resolver only resolves
+  JS-like extensions, so CSS files are outside its purview),
+  *regardless* of whether the resolved `dist/index.css` is present on
+  disk locally. A disable directive here is always reported as unused
+  by ESLint's default `reportUnusedDisableDirectives` and stripped by
+  pre-commit `lint-file --fix` on every commit — including
+  directive-only follow-up commits, which then land empty. The 6-round
+  forensic trail lives in
   [`docs/research/eslint-disable-line-discovery.md`](docs/research/eslint-disable-line-discovery.md).
 
 ### ESLint patterns
 
 `@automattic/charts/style.css` is a subpath export that resolves to
-`dist/index.css`, which is gitignored and not built during the ESLint CI
-step, so `import/no-unresolved` fires on the import. The standard fix is
-to disable that rule for the line:
+`dist/index.css`. Earlier rounds of this research assumed
+`import/no-unresolved` fires on the import (because `dist/index.css` is
+gitignored and not built during ESLint CI), and therefore that a
+disable directive was needed. The host dogfood for
+[RSM-3726](https://linear.app/a8c/issue/RSM-3726) (PR #50) falsified
+that premise: the rule never fires on this import.
 
-```ts
-import '@automattic/charts/style.css'; // eslint-disable-line import/no-unresolved -- CSS subpath; dist/index.css is gitignored
+Why: the repo's import-resolver config
+(`tools/js-tools/eslintrc/base.mjs:251-266`) wires
+`eslint-import-resolver-typescript`, and that resolver only handles
+JS-like extensions (`.ts/.tsx/.js/.jsx/...`). CSS subpath imports are
+outside its purview; `import/no-unresolved` simply does not evaluate
+them. Confirmed empirically by running
+`pnpm run lint-file projects/packages/premium-analytics/routes/dashboard/stage.tsx`
+against both filesystem states (with `dist/index.css` present and with
+it moved aside) — exit 0, no warnings in both.
+
+Practical consequence: any `eslint-disable-line import/no-unresolved`
+comment on this import is genuinely *unused*. ESLint's v9/v10 default
+`linterOptions.reportUnusedDisableDirectives` reports unused disable
+directives as warnings, and pre-commit `lint-file --max-warnings=0
+--fix` autofixes them — the comment gets stripped on the initial
+commit AND on a directive-only follow-up commit (verified on PR #50
+where the follow-up landed empty). The literal warning text seen in
+pre-commit output:
+
+```
+warning  Unused eslint-disable directive
+  (no problems were reported from 'import/no-unresolved')
 ```
 
-**Both forms are observed to disappear during pre-commit `lint-file
---fix`** when new imports land in a file at the same time. The host
-dogfood for [RSM-3713](https://linear.app/a8c/issue/RSM-3713) (PR #49)
-saw the inline form stripped on the initial commit
-(`dd52a32094`); a follow-up commit (`e60c87ea93`) re-added it, and
-because that commit only changed the directive (not surrounding
-imports), the strip didn't re-fire. Searching the full history:
+This rules out the Round 5 conclusion that
+`reportUnusedDisableDirectives` was not the mechanism — the option is
+enabled by default in modern ESLint regardless of whether any config
+explicitly sets it.
 
-```bash
-git log --all -S 'eslint-disable-line import/no-unresolved' \
-  -- projects/packages/premium-analytics/routes/dashboard/stage.tsx
-```
-
-…returns only `e60c87ea93` — meaning the prior "inline form already
-ships in pie chart" assumption was unverified; no commit on
-`fork/add/premium-analytics-pie-chart` actually contained the
-directive either.
-
-The pre-commit pipeline runs Prettier and `eslint --fix` via
-`lint-file`. The `import/order` rule is configured with
-`newlines-between: 'never'` + alphabetic ordering
-(`tools/js-tools/eslintrc/base.mjs:318-325`). What exact step strips
-the comment is still not isolated — see
-[`docs/research/eslint-disable-line-discovery.md`](docs/research/eslint-disable-line-discovery.md)
-for which mechanisms were ruled out across 5 rounds. The directive
-itself is correct (lint and CI both pass when it's present); the
-unreliable part is the formatter pipeline preserving it through a
-new-imports commit.
-
-**Operational rule:** after `git commit` lands a file with this
-import, immediately run `git show HEAD -- <file>` and check the
-directive is still on the import line. If it's gone, re-add it in a
-follow-up commit; that commit's pre-commit pass typically lets the
-comment through because nothing else is being rewritten.
+**Operational rule:** write the import bare. Do not add a disable
+directive; do not run a post-commit verification step; do not open a
+follow-up commit to re-add the directive. The previous "verify after
+commit, re-add if missing" rule is retired.
 
 ### `@wordpress/boot` shim
 
