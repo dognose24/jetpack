@@ -2,8 +2,9 @@
  * Pie chart hover/tooltip interaction.
  *
  * Currently SKIPPED — the dashboard route on `fork/trunk` is the clean state (no
- * charts). Unskip when the `dashboard-pie-chart` task lands a `PieChartUnresponsive`
- * on the dashboard (see `projects/packages/premium-analytics/tasks/dashboard-pie-chart.md`).
+ * charts). Unskip when a chart task lands a `PieChartUnresponsive` on the dashboard
+ * (see `projects/packages/premium-analytics/AGENTS.md` → "Common patterns and pitfalls"
+ * for the chart-component conventions).
  *
  * Notes on hovering `@automattic/charts`:
  *
