@@ -155,8 +155,10 @@ know up front, so individual task issues don't re-explain the rationale.
 
 - **`withTooltips` prop is required** if hover/tooltip Playwright specs
   are part of the task's DoD. Without it the chart skips its mouse
-  handlers and the tooltip portal never renders, so any tooltip
-  assertion fails vacuously.
+  handlers, the tooltip portal never renders, and any spec that hovers
+  + asserts on `.visx-tooltip` content (e.g.
+  `expect(tooltip).toBeVisible()`) fails because the element it's
+  waiting for never appears.
 
 - **CSS subpath import is required**: `import '@automattic/charts/style.css';`
   must be present in the route that renders the chart. The package does
@@ -200,14 +202,19 @@ register the admin page.
 
 ## Linear issue contract for `/premium-analytics-implement-task`
 
-This package's `tasks/` directory is gone. Tasks live in Linear issues;
-the implement-task skill reads the issue directly (Phase 2 — see the
-skill's docstring for current status / transition state). Until Phase 2
-lands, a human will manually translate the issue description into a
-form the skill can consume.
+This package's `tasks/` directory is gone. Tasks live in Linear issues.
 
-A Linear issue picked up by the skill must contain these sections in
-its description.
+**Today (Phase 1):** the implement-task skill takes a path to a local
+scratch md file (see the skill's "Input" section for the exact call
+signature). A human translates the Linear issue description into that
+scratch file before invoking the skill.
+
+**Future (Phase 2, RSM-3707, not yet landed):** the skill will read the
+Linear issue body directly via MCP; no scratch file needed.
+
+The contract below applies to the issue description in both phases —
+in Phase 1 it doubles as the scratch file's contents; in Phase 2 the
+skill consumes it straight from Linear.
 
 ### Required
 

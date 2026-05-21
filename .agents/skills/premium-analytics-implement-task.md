@@ -1,11 +1,12 @@
 ---
 description: >
-  Implement a premium-analytics task end-to-end: read the task spec (Linear issue —
-  see "Input" below for the in-flight transition from task md), create a branch from
-  fork/trunk, implement, build, run UI verification (default backend: wp-verify
-  Playwright in jetpack-ai-sandbox; override via `VERIFY_SKILL` env var for non-sandbox
-  backends), add a changelog entry, push, open a PR, start the review cycle, and audit
-  for new invariants worth capturing into package docs.
+  Implement a premium-analytics task end-to-end: read the task spec from a local
+  scratch md file (Phase 1 transition; Phase 2 will read the Linear issue directly —
+  see "Input"), create a branch from fork/trunk, implement, build, run UI verification
+  (default backend: wp-verify Playwright in jetpack-ai-sandbox; override via
+  `VERIFY_SKILL` env var for non-sandbox backends), add a changelog entry, push, open
+  a PR, start the review cycle, and audit for new invariants worth capturing into
+  package docs.
 allowed-tools: Bash(docker:*), Bash(node:*), Bash(npx:*), Bash(playwright:*), Bash(npm:*), Bash(pnpm:*), Bash(bash:*), Bash(curl:*), Bash(sleep:*), Bash(test:*), Bash(mkdir:p), Bash(cat:*), Bash(cp:*), Bash(tr:*), Bash(sed:*), Bash(grep:*), Bash(git symbolic-ref:*), Bash(git rev-parse:*), Bash(git fetch:*), Bash(git checkout:*), Bash(git add:*), Bash(git diff:*), Bash(git commit:*), Bash(git push:*), Bash(git remote:*), Bash(git rm:*), Bash(git log:*), Bash(git status:*), Bash(gh pr create:*), Bash(gh pr view:*), Bash(gh pr comment:*), Bash(gh pr edit:*), Bash(gh api:*), Bash(mktemp:*), Write, Read
 ---
 
@@ -20,22 +21,50 @@ the same way regardless of backend.
 
 ## Input
 
-**Target state (Phase 2, not yet landed):** the skill takes a Linear issue
-identifier (e.g. `RSM-1234`) as its argument and reads the spec directly from
-the issue description via the `linear/issue` MCP tool. The Linear issue
-contract is documented in
-`projects/packages/premium-analytics/AGENTS.md` → "Linear issue contract".
+**Today (Phase 1 transition):** the skill takes a path to a local scratch
+md file containing the task spec. The caller (human or upstream agent)
+must save the Linear issue description to that file before invoking.
+Every "task md" reference in the steps below points at this scratch
+file.
 
-**Transition state (today):** task md files under
-`projects/packages/premium-analytics/tasks/` have been removed (Linear-first
-restructure). Until the Phase 2 refactor lands, the human caller manually
-translates the Linear issue description into the steps below — feeding scope,
-implementation details, and DoD from the issue body. Either copy-paste the
-issue description into the agent session, or save it to a local scratch path
-and pass that path to the skill as a stopgap.
+```
+/premium-analytics-implement-task /tmp/RSM-1234.md
+```
 
-The Phase 2 work is tracked separately; until then this skill should be
-treated as semi-manual at the spec-fetching step.
+The scratch file's contents must follow the **Linear issue contract**
+documented in
+`projects/packages/premium-analytics/AGENTS.md` → "Linear issue contract
+for `/premium-analytics-implement-task`". That contract lists the
+required sections (What, Scope, Implementation, DoD, Submitting) and
+their expected structure. The scratch file is throwaway — `/tmp/` keeps
+it out of the repo automatically.
+
+A typical stopgap flow:
+
+```bash
+# Fetch the Linear issue description and save it to a scratch path.
+# (How you fetch is up to the caller — Linear web UI copy/paste, MCP
+# linear/issue tool, an Automattic CLI, etc.)
+cat > /tmp/RSM-1234.md <<'EOF'
+# Task: Add device-types pie chart to dashboard
+
+## What
+…
+
+## Scope
+…
+EOF
+
+# Then invoke the skill with the scratch path.
+/premium-analytics-implement-task /tmp/RSM-1234.md
+```
+
+**Future (Phase 2, RSM-3707, not yet landed):** the skill will take a
+Linear issue identifier (e.g. `RSM-1234`) directly and fetch the
+description via the `linear/issue` MCP tool — no scratch file needed.
+The Linear issue contract referenced above is forward-compatible: when
+Phase 2 lands, the same contract applies, the source just shifts from
+the scratch file to the issue body in Linear.
 
 ## Pre-flight
 
