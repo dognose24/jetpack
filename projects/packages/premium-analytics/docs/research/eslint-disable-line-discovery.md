@@ -1,17 +1,22 @@
-# How the `eslint-disable-line` inline-form requirement was discovered
+# How the `@automattic/charts` CSS-import disable-and-verify rule was discovered
 
-Captured here because the path to the resolved invariant ran through
-four rounds of PR review and the wrong answer was committed twice before
-the right one held. Future implementers should not need to retrace this
-— the invariant itself lives in
+Captured here because the path to the current invariant ran through
+five rounds of review — including a dogfood task that falsified the
+spec the prior four rounds had agreed on. The current invariant is
+**not** "use the inline form" (that was Rounds 2–4's wrong answer);
+it is "both forms can be stripped during pre-commit `lint-file --fix`,
+so verify with `git show HEAD -- <file>` after every commit that adds
+the import and re-add the directive in a follow-up if missing."
+
+The invariant itself lives in
 [`../../AGENTS.md`](../../AGENTS.md) → "Common patterns and pitfalls" →
-"ESLint patterns". This file is the forensic trail explaining *how* the
-team reached that invariant, not what it is.
+"ESLint patterns". This file is the forensic trail explaining *how*
+the team reached it, not what it is.
 
 Audience: agents and humans extending the chart-related code in this
 package. Read this only if you are touching the `@automattic/charts`
-CSS-import pattern itself or are about to question the inline-form
-choice.
+CSS-import pattern itself, are about to propose an inline-vs-next-line
+shortcut, or are about to skip the verify-after-commit step.
 
 ---
 
