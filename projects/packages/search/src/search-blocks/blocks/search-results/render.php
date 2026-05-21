@@ -2,79 +2,40 @@
 /**
  * Search Results block render.
  *
- * Pure template — no PHP pre-fetch. Search_Blocks::seed_interactivity_state()
- * already seeds empty `results` / `aggregations` / `totalResults` plus an
- * `isLoading` flag that's true whenever the URL carries a search query or
- * filter selection, so the JS store fetches on hydration without flashing
- * the no-results block first.
+ * Group-like wrapper that emits `$content` (the serialized inner block
+ * markup). Each inner result block handles its own state via the
+ * Interactivity API store; this block contributes only the surrounding
+ * chrome (block-wrapper attrs derived from color/spacing/border/typography
+ * supports).
+ *
+ * Free-plan attribution: the Jetpack colophon must appear on every
+ * free-plan results page. If an author has removed the
+ * `jetpack-search/powered-by` block from the panel (or never had one in
+ * their pattern), this renderer appends a canonical render of it on the
+ * way out so the attribution is structurally non-removable. Paid-plan
+ * sites are unaffected — authors can keep, hide, or delete the block
+ * freely.
  *
  * @package automattic/jetpack-search
  */
 
 namespace Automattic\Jetpack\Search;
 
+// phpcs:disable VariableAnalysis.CodeAnalysis.VariableAnalysis.UndefinedVariable
+
+$panel_content = $content; // @phan-suppress-current-line PhanUndeclaredGlobalVariable -- $content is provided by WP at block render.
+
+if ( Search_Blocks::is_free_plan() && false === strpos( $panel_content, 'wp-block-jetpack-search-powered-by' ) ) {
+	$panel_content .= render_block(
+		array(
+			'blockName' => 'jetpack-search/powered-by',
+			'attrs'     => array(),
+		)
+	);
+}
 ?>
-<div
-	<?php echo wp_kses_data( get_block_wrapper_attributes() ); ?>
-	data-wp-interactive="jetpack-search"
-	data-wp-init="callbacks.initialize"
-	data-wp-bind--aria-busy="state.isLoading"
->
-	<ul
-		class="jetpack-search-results__list"
-		aria-live="polite"
-	>
-		<template
-			data-wp-each--result="state.results"
-			data-wp-key="context.result.id"
-		>
-			<li class="jetpack-search-results__item">
-				<div class="jetpack-search-results__copy">
-					<h3 class="jetpack-search-results__title">
-						<a
-							class="jetpack-search-results__title-link"
-							data-wp-bind--href="context.result.permalink"
-						>
-							<span
-								data-wp-bind--hidden="context.result.hasTitleHighlight"
-								data-wp-text="context.result.title"
-							></span>
-							<template
-								data-wp-each--piece="context.result.titlePieces"
-								data-wp-key="context.piece.index"
-							>
-								<span
-									data-wp-text="context.piece.text"
-									data-wp-class--jetpack-search-results__highlight="context.piece.isHighlight"
-								></span>
-							</template>
-						</a>
-					</h3>
-					<div
-						class="jetpack-search-results__path"
-						data-wp-bind--hidden="!context.result.path"
-						data-wp-text="context.result.path"
-					></div>
-					<div
-						class="jetpack-search-results__date"
-						data-wp-bind--hidden="!context.result.dateLabel"
-						data-wp-text="context.result.dateLabel"
-					></div>
-				</div>
-				<a
-					class="jetpack-search-results__image-link"
-					data-wp-bind--href="context.result.permalink"
-					data-wp-bind--hidden="!context.result.imageUrl"
-					tabindex="-1"
-					aria-hidden="true"
-				>
-					<img
-						class="jetpack-search-results__image"
-						data-wp-bind--src="context.result.imageUrl"
-						alt=""
-					/>
-				</a>
-			</li>
-		</template>
-	</ul>
+<div <?php echo wp_kses_data( get_block_wrapper_attributes( array( 'class' => 'jetpack-search-search-results' ) ) ); ?>>
+	<?php
+	echo $panel_content; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Inner block HTML is already escaped by each child block's renderer; auto-injected powered-by output is rendered through render_block() and escaped by its own renderer.
+	?>
 </div>

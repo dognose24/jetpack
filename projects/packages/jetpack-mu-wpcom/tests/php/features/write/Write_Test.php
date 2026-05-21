@@ -7,6 +7,7 @@
 
 use Automattic\Jetpack\Jetpack_Mu_Wpcom;
 
+require_once Jetpack_Mu_Wpcom::PKG_DIR . 'src/features/wpcom-block-editor/functions.editor-type.php';
 require_once Jetpack_Mu_Wpcom::PKG_DIR . 'src/features/write/write.php';
 
 /**
@@ -95,18 +96,22 @@ class Write_Test extends \WorDBless\BaseTestCase {
 	 * Render the Write template with wp_head/wp_footer hooks removed to avoid
 	 * side effects from other features (e.g. missing build assets).
 	 *
-	 * @param string $title      Post title.
-	 * @param string $content    Post content.
-	 * @param int    $post_id    Post ID (0 for new).
-	 * @param array  $categories Categories data.
+	 * @param string $title             Post title.
+	 * @param string $content           Post content.
+	 * @param int    $post_id           Post ID (0 for new).
+	 * @param array  $categories        Categories data.
+	 * @param string $post_status       Post status.
+	 * @param array  $video_placeholders Video placeholder tokens.
+	 * @param bool   $show_cat_row      Whether to show the category row.
+	 * @param string $cat_label         Initial category label text.
 	 * @return string The rendered HTML.
 	 */
-	private function render_template( $title = '', $content = '', $post_id = 0, $categories = array() ) {
+	private function render_template( $title = '', $content = '', $post_id = 0, $categories = array(), $post_status = 'new', $video_placeholders = array(), $show_cat_row = false, $cat_label = '' ) {
 		remove_all_actions( 'wp_head' );
 		remove_all_actions( 'wp_footer' );
 
 		ob_start();
-		wpcom_write_template( $title, $content, $post_id, $categories );
+		wpcom_write_template( $title, $content, $post_id, $categories, $post_status, $video_placeholders, $show_cat_row, $cat_label );
 		return ob_get_clean();
 	}
 
@@ -120,7 +125,7 @@ class Write_Test extends \WorDBless\BaseTestCase {
 
 		$this->assertStringContainsString( 'data-wp-interactive="wpcom-write"', $output );
 		$this->assertStringContainsString( 'class="bw-app"', $output );
-		$this->assertStringContainsString( 'class="bw-content"', $output );
+		$this->assertStringContainsString( 'class="bw-content bw-is-empty"', $output );
 		$this->assertStringContainsString( 'contenteditable="true"', $output );
 		$this->assertStringContainsString( 'Tell your story...', $output );
 		$this->assertStringContainsString( 'Save draft', $output );
@@ -141,7 +146,7 @@ class Write_Test extends \WorDBless\BaseTestCase {
 			)
 		);
 
-		$output = $this->render_template( 'Test Post', '<p>Content</p>', $post_id );
+		$output = $this->render_template( 'Test Post', '<p>Content</p>', $post_id, array(), 'publish' );
 
 		$this->assertStringContainsString( 'Update', $output );
 		$this->assertStringNotContainsString( '>Publish<', $output );
@@ -261,6 +266,18 @@ class Write_Test extends \WorDBless\BaseTestCase {
 	}
 
 	/**
+	 * Test that the slash menu contains list entries.
+	 */
+	public function test_slash_menu_contains_list_entries() {
+		wp_set_current_user( $this->admin_id );
+
+		$output = $this->render_template();
+
+		$this->assertStringContainsString( 'actions.insertBulletedList', $output );
+		$this->assertStringContainsString( 'actions.insertNumberedList', $output );
+	}
+
+	/**
 	 * Test that the text color picker is rendered.
 	 */
 	public function test_toolbar_contains_text_color_picker() {
@@ -296,5 +313,970 @@ class Write_Test extends \WorDBless\BaseTestCase {
 		$this->assertArrayHasKey( 'formatAlignRight', $state );
 		$this->assertArrayHasKey( 'formatOList', $state );
 		$this->assertArrayHasKey( 'formatUList', $state );
+
+		// Category selector state.
+		$this->assertArrayHasKey( 'catLabel', $state );
+		$this->assertArrayHasKey( 'showCatDropdown', $state );
+		$this->assertFalse( $state['showCatDropdown'] );
+
+		// Old category picker key should not exist.
+		$this->assertArrayNotHasKey( 'showCatPicker', $state );
+	}
+
+	/**
+	 * Test that the category row is not rendered when show_cat_row is false.
+	 */
+	public function test_category_row_hidden_when_show_cat_row_false() {
+		wp_set_current_user( $this->admin_id );
+
+		$output = $this->render_template( '', '', 0, array(), 'new', array(), false, '' );
+
+		$this->assertStringNotContainsString( 'bw-meta-cat-btn', $output );
+		$this->assertStringNotContainsString( 'Writing in', $output );
+	}
+
+	/**
+	 * Test that the category row is rendered when show_cat_row is true.
+	 */
+	public function test_category_row_shown_when_show_cat_row_true() {
+		wp_set_current_user( $this->admin_id );
+
+		$output = $this->render_template( '', '', 0, array(), 'new', array(), true, 'Writing in Uncategorized' );
+
+		$this->assertStringContainsString( 'bw-meta-cat-btn', $output );
+		$this->assertStringContainsString( 'Writing in Uncategorized', $output );
+		$this->assertStringContainsString( 'bw-meta-cat-label', $output );
+	}
+
+	/**
+	 * Test that the category label is seeded into the template output.
+	 */
+	public function test_cat_label_seeded_in_template() {
+		wp_set_current_user( $this->admin_id );
+
+		$output = $this->render_template( '', '', 0, array(), 'new', array(), true, 'Writing in Travel' );
+
+		$this->assertStringContainsString( 'Writing in Travel', $output );
+	}
+
+	/**
+	 * Test that the topbar "more" menu is rendered when editing an existing post.
+	 */
+	public function test_more_menu_rendered_when_editing() {
+		wp_set_current_user( $this->admin_id );
+
+		$post_id = wp_insert_post(
+			array(
+				'post_title'  => 'Draft',
+				'post_status' => 'draft',
+				'post_author' => $this->admin_id,
+			)
+		);
+
+		$output = $this->render_template( 'Draft', '<p>Hi</p>', $post_id, array(), 'draft' );
+
+		$this->assertStringContainsString( 'class="bw-more-wrap"', $output );
+		$this->assertStringContainsString( 'actions.toggleMoreMenu', $output );
+		$this->assertStringContainsString( 'actions.openInBlockEditor', $output );
+		$this->assertStringContainsString( 'actions.previewPost', $output );
+		$this->assertStringContainsString( 'Open in block editor', $output );
+		$this->assertStringContainsString( '>Preview<', $output );
+	}
+
+	/**
+	 * Test that the topbar "more" menu is also rendered for new posts.
+	 * The actions save first to create the post before navigating.
+	 */
+	public function test_more_menu_rendered_for_new_post() {
+		wp_set_current_user( $this->admin_id );
+
+		$output = $this->render_template();
+
+		$this->assertStringContainsString( 'class="bw-more-wrap"', $output );
+		$this->assertStringContainsString( 'actions.openInBlockEditor', $output );
+		$this->assertStringContainsString( 'actions.previewPost', $output );
+	}
+
+	/**
+	 * Test that blockEditorUrl and previewUrl are seeded in state when editing.
+	 */
+	public function test_more_menu_urls_in_state_when_editing() {
+		wp_set_current_user( $this->admin_id );
+
+		$post_id = wp_insert_post(
+			array(
+				'post_title'  => 'Draft',
+				'post_status' => 'draft',
+				'post_author' => $this->admin_id,
+			)
+		);
+
+		$_GET['post'] = $post_id;
+
+		ob_start();
+		wpcom_write_render_admin_page();
+		ob_end_clean();
+
+		unset( $_GET['post'] );
+
+		$state = wp_interactivity_state( 'wpcom-write' );
+
+		$this->assertArrayHasKey( 'blockEditorUrl', $state );
+		$this->assertArrayHasKey( 'previewUrl', $state );
+		$this->assertArrayHasKey( 'showMoreMenu', $state );
+		$this->assertFalse( $state['showMoreMenu'] );
+
+		// Block editor URL uses the existing classic-editor__forget pattern.
+		$this->assertStringContainsString( 'post.php?post=' . $post_id, $state['blockEditorUrl'] );
+		$this->assertStringContainsString( 'classic-editor__forget', $state['blockEditorUrl'] );
+
+		// Preview URL for a draft should be non-empty.
+		$this->assertNotEmpty( $state['previewUrl'] );
+	}
+
+	/**
+	 * Test that blockEditorUrl and previewUrl are empty for new posts.
+	 */
+	public function test_more_menu_urls_empty_for_new_post() {
+		wp_set_current_user( $this->admin_id );
+
+		ob_start();
+		wpcom_write_render_admin_page();
+		ob_end_clean();
+
+		$state = wp_interactivity_state( 'wpcom-write' );
+
+		$this->assertSame( '', $state['blockEditorUrl'] );
+		$this->assertSame( '', $state['previewUrl'] );
+	}
+
+	/**
+	 * Test that the help modal contains the #tag tip.
+	 */
+	public function test_help_modal_contains_hashtag_tip() {
+		wp_set_current_user( $this->admin_id );
+
+		$output = $this->render_template();
+
+		$this->assertStringContainsString( '#tag', $output );
+		$this->assertStringContainsString( 'assigns them to the post on save', $output );
+	}
+
+	/**
+	 * Test that the Interactivity API state includes the recovery banner field.
+	 */
+	public function test_interactivity_state_includes_recovery_banner() {
+		wp_set_current_user( $this->admin_id );
+
+		ob_start();
+		wpcom_write_render_admin_page();
+		ob_end_clean();
+
+		$state = wp_interactivity_state( 'wpcom-write' );
+
+		$this->assertArrayHasKey( 'showRecoveryBanner', $state );
+		$this->assertFalse( $state['showRecoveryBanner'] );
+	}
+
+	/**
+	 * Test that the template contains the recovery banner markup.
+	 */
+	public function test_template_contains_recovery_banner() {
+		wp_set_current_user( $this->admin_id );
+
+		$output = $this->render_template();
+
+		$this->assertStringContainsString( 'class="bw-recovery-banner"', $output );
+		$this->assertStringContainsString( 'actions.resumeDraft', $output );
+		$this->assertStringContainsString( 'actions.dismissRecovery', $output );
+		$this->assertStringContainsString( 'You have a recent draft', $output );
+		$this->assertStringContainsString( 'Resume editing', $output );
+	}
+
+	/**
+	 * Test that the recovery banner is hidden by default.
+	 */
+	public function test_recovery_banner_hidden_by_default() {
+		wp_set_current_user( $this->admin_id );
+
+		$output = $this->render_template();
+
+		$this->assertStringContainsString( 'bw-recovery-banner" hidden', $output );
+	}
+
+	/**
+	 * Test that the template contains the beta disclaimer banner markup.
+	 */
+	public function test_template_contains_disclaimer_banner() {
+		wp_set_current_user( $this->admin_id );
+
+		$output = $this->render_template();
+
+		$this->assertStringContainsString( 'class="bw-disclaimer-banner"', $output );
+		$this->assertStringContainsString( 'actions.dismissDisclaimer', $output );
+		$this->assertStringContainsString( 'Data loss is possible', $output );
+	}
+
+	/**
+	 * Test that the disclaimer banner is hidden by default (shown via JS after localStorage check).
+	 */
+	public function test_disclaimer_banner_hidden_by_default() {
+		wp_set_current_user( $this->admin_id );
+
+		$output = $this->render_template();
+
+		$this->assertStringContainsString( 'bw-disclaimer-banner" hidden', $output );
+	}
+
+	/**
+	 * Test that autosave i18n strings are included in the rendered page state.
+	 */
+	public function test_autosave_i18n_strings_registered() {
+		wp_set_current_user( $this->admin_id );
+
+		// Render the admin page which seeds the Interactivity API state.
+		ob_start();
+		wpcom_write_render_admin_page();
+		ob_end_clean();
+
+		$state = wp_interactivity_state( 'wpcom-write' );
+
+		// The showRecoveryBanner field confirms autosave state is registered.
+		$this->assertArrayHasKey( 'showRecoveryBanner', $state );
+	}
+
+	/**
+	 * Helper: build a wp:embed block string.
+	 *
+	 * @param string $url  The embed URL.
+	 * @param string $type The embed type attribute (default "video").
+	 * @return string Block markup.
+	 */
+	private function embed_block( $url, $type = 'video' ) {
+		$attrs = wp_json_encode(
+			array(
+				'url'              => $url,
+				'type'             => $type,
+				'providerNameSlug' => 'youtube',
+			),
+			JSON_UNESCAPED_SLASHES
+		);
+		return '<!-- wp:embed ' . $attrs . ' --><figure class="wp-block-embed"><div class="wp-block-embed__wrapper">' . esc_url( $url ) . '</div></figure><!-- /wp:embed -->';
+	}
+
+	/**
+	 * Test YouTube standard URL is converted to an embed iframe.
+	 */
+	public function test_convert_video_embeds_youtube_standard() {
+		$content = $this->embed_block( 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' );
+		$result  = wpcom_write_convert_video_embeds( $content );
+
+		$this->assertArrayHasKey( 'content', $result );
+		$this->assertArrayHasKey( 'placeholders', $result );
+		$this->assertCount( 1, $result['placeholders'] );
+		$this->assertStringContainsString( '<!--WRITE_VIDEO_', $result['content'] );
+
+		$html = array_values( $result['placeholders'] )[0];
+		$this->assertStringContainsString( 'class="bw-video-figure"', $html );
+		$this->assertStringContainsString( 'https://www.youtube.com/embed/dQw4w9WgXcQ', $html );
+		$this->assertStringContainsString( '<iframe', $html );
+		$this->assertStringContainsString( 'title="YouTube video"', $html );
+	}
+
+	/**
+	 * Test YouTube short URL (youtu.be) is converted to an embed iframe.
+	 */
+	public function test_convert_video_embeds_youtube_short() {
+		$content = $this->embed_block( 'https://youtu.be/dQw4w9WgXcQ' );
+		$result  = wpcom_write_convert_video_embeds( $content );
+
+		$html = array_values( $result['placeholders'] )[0];
+		$this->assertStringContainsString( 'https://www.youtube.com/embed/dQw4w9WgXcQ', $html );
+		$this->assertStringContainsString( 'title="YouTube video"', $html );
+	}
+
+	/**
+	 * Test YouTube URL with v= not as the first query parameter.
+	 */
+	public function test_convert_video_embeds_youtube_v_not_first_param() {
+		$content = $this->embed_block( 'https://www.youtube.com/watch?feature=share&v=dQw4w9WgXcQ' );
+		$result  = wpcom_write_convert_video_embeds( $content );
+
+		$html = array_values( $result['placeholders'] )[0];
+		$this->assertStringContainsString( 'https://www.youtube.com/embed/dQw4w9WgXcQ', $html );
+	}
+
+	/**
+	 * Test Vimeo URL is converted to an embed iframe.
+	 */
+	public function test_convert_video_embeds_vimeo() {
+		$content = $this->embed_block( 'https://vimeo.com/123456789' );
+		$result  = wpcom_write_convert_video_embeds( $content );
+
+		$html = array_values( $result['placeholders'] )[0];
+		$this->assertStringContainsString( 'class="bw-video-figure"', $html );
+		$this->assertStringContainsString( 'https://player.vimeo.com/video/123456789', $html );
+		$this->assertStringContainsString( '<iframe', $html );
+		$this->assertStringContainsString( 'title="Vimeo video"', $html );
+	}
+
+	/**
+	 * Test that non-video embed blocks are left unchanged.
+	 */
+	public function test_convert_video_embeds_skips_non_video() {
+		$content = $this->embed_block( 'https://twitter.com/example/status/123', 'rich' );
+		$result  = wpcom_write_convert_video_embeds( $content );
+
+		$this->assertEmpty( $result['placeholders'] );
+		$this->assertSame( $content, $result['content'] );
+	}
+
+	/**
+	 * Test that embed blocks with missing URL are left unchanged.
+	 */
+	public function test_convert_video_embeds_skips_missing_url() {
+		$attrs   = wp_json_encode(
+			array(
+				'type'             => 'video',
+				'providerNameSlug' => 'youtube',
+			),
+			JSON_UNESCAPED_SLASHES
+		);
+		$content = '<!-- wp:embed ' . $attrs . ' --><figure class="wp-block-embed"><div class="wp-block-embed__wrapper"></div></figure><!-- /wp:embed -->';
+		$result  = wpcom_write_convert_video_embeds( $content );
+
+		$this->assertEmpty( $result['placeholders'] );
+		$this->assertSame( $content, $result['content'] );
+	}
+
+	/**
+	 * Test that plain content without embed blocks passes through unchanged.
+	 */
+	public function test_convert_video_embeds_plain_content() {
+		$content = '<p>Hello world</p>';
+		$result  = wpcom_write_convert_video_embeds( $content );
+
+		$this->assertEmpty( $result['placeholders'] );
+		$this->assertSame( $content, $result['content'] );
+	}
+
+	/**
+	 * Test that multiple video embeds in one string are all converted.
+	 */
+	public function test_convert_video_embeds_multiple() {
+		$content = $this->embed_block( 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' )
+			. "\n"
+			. $this->embed_block( 'https://vimeo.com/987654321' );
+		$result  = wpcom_write_convert_video_embeds( $content );
+
+		$this->assertCount( 2, $result['placeholders'] );
+		$all_html = implode( "\n", array_values( $result['placeholders'] ) );
+		$this->assertStringContainsString( 'https://www.youtube.com/embed/dQw4w9WgXcQ', $all_html );
+		$this->assertStringContainsString( 'https://player.vimeo.com/video/987654321', $all_html );
+		$this->assertSame( 2, substr_count( $all_html, 'bw-video-figure' ) );
+	}
+
+	/**
+	 * Test that editing a post with a video embed renders an iframe in the template.
+	 */
+	public function test_template_renders_video_embed_iframe() {
+		wp_set_current_user( $this->admin_id );
+
+		$video_block = $this->embed_block( 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' );
+		$post_id     = wp_insert_post(
+			array(
+				'post_title'   => 'Video Post',
+				'post_content' => $video_block,
+				'post_status'  => 'draft',
+				'post_author'  => $this->admin_id,
+			)
+		);
+
+		// Simulate the render path: convert embeds to tokens, run the_content,
+		// then pass placeholders to the template for post-kses replacement.
+		$post         = get_post( $post_id );
+		$video_result = wpcom_write_convert_video_embeds( $post->post_content );
+		$rendered     = apply_filters( 'the_content', $video_result['content'] ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound
+		$output       = $this->render_template( 'Video Post', $rendered, $post_id, array(), 'draft', $video_result['placeholders'] );
+
+		$this->assertStringContainsString( '<iframe', $output );
+		$this->assertStringContainsString( 'youtube.com/embed/dQw4w9WgXcQ', $output );
+		$this->assertStringContainsString( 'bw-video-figure', $output );
+	}
+
+	/**
+	 * Test that the admin_title filter sets the browser tab title on the Write page.
+	 */
+	public function test_admin_title_filter_sets_title_on_write_page() {
+		$_GET['page'] = 'write';
+		$result       = apply_filters( 'admin_title', ' &#8249; Test Site &#8212; WordPress', '' );
+		unset( $_GET['page'] );
+
+		$this->assertStringStartsWith( 'Write editor ', $result );
+	}
+
+	/**
+	 * Test that the admin_title filter does not affect other admin pages.
+	 */
+	public function test_admin_title_filter_does_not_affect_other_pages() {
+		$original = 'Dashboard &#8249; Test Site &#8212; WordPress';
+		$result   = apply_filters( 'admin_title', $original, 'Dashboard' );
+
+		$this->assertSame( $original, $result );
+	}
+
+	// --- Unsupported content detection tests ---
+
+	/**
+	 * Test that empty content returns false (safe).
+	 */
+	public function test_detect_unsupported_empty_content() {
+		$this->assertFalse( wpcom_write_detect_unsupported_content( '' ) );
+	}
+
+	/**
+	 * Test that classic editor content (no block markers) returns 'classic-editor'.
+	 */
+	public function test_detect_unsupported_classic_content() {
+		$content = '<p>Hello world</p><p>This is a classic post.</p>';
+		$this->assertSame( 'classic-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that content with only supported blocks returns false.
+	 */
+	public function test_detect_unsupported_supported_blocks_only() {
+		$content = '<!-- wp:paragraph --><p>Hello</p><!-- /wp:paragraph -->'
+			. '<!-- wp:heading {"level":2} --><h2>Title</h2><!-- /wp:heading -->'
+			. '<!-- wp:separator --><hr class="wp-block-separator"/><!-- /wp:separator -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that a supported list with list-items returns false.
+	 */
+	public function test_detect_unsupported_list_blocks() {
+		$content = '<!-- wp:list --><ul><!-- wp:list-item --><li>Item</li><!-- /wp:list-item --></ul><!-- /wp:list -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that a supported image block returns false.
+	 */
+	public function test_detect_unsupported_image_block() {
+		$content = '<!-- wp:image {"id":42} --><figure class="wp-block-image"><img src="test.jpg" alt=""/></figure><!-- /wp:image -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that a supported quote block returns false.
+	 */
+	public function test_detect_unsupported_quote_block() {
+		$content = '<!-- wp:quote --><blockquote class="wp-block-quote"><p>A quote</p></blockquote><!-- /wp:quote -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that a YouTube video embed returns false (supported).
+	 */
+	public function test_detect_unsupported_youtube_embed() {
+		$attrs   = '{"url":"https://www.youtube.com/watch?v=abc","type":"video","providerNameSlug":"youtube"}';
+		$content = '<!-- wp:embed ' . $attrs . ' --><figure class="wp-block-embed"></figure><!-- /wp:embed -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that a Vimeo video embed returns false (supported).
+	 */
+	public function test_detect_unsupported_vimeo_embed() {
+		$attrs   = '{"url":"https://vimeo.com/123","type":"video","providerNameSlug":"vimeo"}';
+		$content = '<!-- wp:embed ' . $attrs . ' --><figure class="wp-block-embed"></figure><!-- /wp:embed -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that an unsupported block type returns 'block-editor'.
+	 */
+	public function test_detect_unsupported_gallery_block() {
+		$content = '<!-- wp:gallery {"ids":[1,2]} --><figure class="wp-block-gallery"></figure><!-- /wp:gallery -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that a namespaced unsupported block returns 'block-editor'.
+	 */
+	public function test_detect_unsupported_namespaced_block() {
+		$content = '<!-- wp:core/table --><table></table><!-- /wp:core/table -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that a columns block returns 'block-editor'.
+	 */
+	public function test_detect_unsupported_columns_block() {
+		$content = '<!-- wp:columns --><div class="wp-block-columns"><!-- wp:column --><div class="wp-block-column"></div><!-- /wp:column --></div><!-- /wp:columns -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that a non-video embed (e.g. Twitter) returns 'block-editor'.
+	 */
+	public function test_detect_unsupported_twitter_embed() {
+		$attrs   = '{"url":"https://twitter.com/example/status/123","type":"rich","providerNameSlug":"twitter"}';
+		$content = '<!-- wp:embed ' . $attrs . ' --><figure class="wp-block-embed"></figure><!-- /wp:embed -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that a non-video YouTube embed (e.g. playlist) returns 'block-editor'.
+	 */
+	public function test_detect_unsupported_youtube_non_video_embed() {
+		$attrs   = '{"url":"https://www.youtube.com/playlist?list=abc","type":"rich","providerNameSlug":"youtube"}';
+		$content = '<!-- wp:embed ' . $attrs . ' --><figure class="wp-block-embed"></figure><!-- /wp:embed -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that textColor attribute returns 'block-editor'.
+	 */
+	public function test_detect_unsupported_text_color() {
+		$content = '<!-- wp:paragraph {"textColor":"vivid-red"} --><p class="has-vivid-red-color has-text-color">Red text</p><!-- /wp:paragraph -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that backgroundColor attribute returns 'block-editor'.
+	 */
+	public function test_detect_unsupported_background_color() {
+		$content = '<!-- wp:paragraph {"backgroundColor":"pale-pink"} --><p class="has-pale-pink-background-color">Pink bg</p><!-- /wp:paragraph -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that fontSize attribute returns 'block-editor'.
+	 */
+	public function test_detect_unsupported_font_size() {
+		$content = '<!-- wp:paragraph {"fontSize":"large"} --><p class="has-large-font-size">Big text</p><!-- /wp:paragraph -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that inline style typography returns 'block-editor'.
+	 */
+	public function test_detect_unsupported_style_typography() {
+		$content = '<!-- wp:paragraph {"style":{"typography":{"fontSize":"22px"}}} --><p style="font-size:22px">Custom size</p><!-- /wp:paragraph -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that inline color classes return 'block-editor'.
+	 */
+	public function test_detect_unsupported_inline_color_class() {
+		$content = '<!-- wp:paragraph --><p>Some <span class="has-inline-color has-vivid-red-color">red</span> text</p><!-- /wp:paragraph -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that has-text-color class returns 'block-editor'.
+	 */
+	public function test_detect_unsupported_has_text_color_class() {
+		$content = '<!-- wp:paragraph --><p class="has-text-color has-vivid-red-color">Colored</p><!-- /wp:paragraph -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that plain text mentioning color class names is not treated as unsupported.
+	 */
+	public function test_detect_unsupported_plain_text_class_name_mentions() {
+		$content = '<!-- wp:paragraph --><p>Use has-text-color and has-inline-color classes in your CSS.</p><!-- /wp:paragraph -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that center-aligned paragraph returns false (preserved by convertToBlocks).
+	 */
+	public function test_detect_unsupported_center_aligned_paragraph() {
+		$content = '<!-- wp:paragraph {"align":"center"} --><p style="text-align:center">Centered</p><!-- /wp:paragraph -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that left-aligned paragraph returns false. The block editor can
+	 * explicitly set align:left even though it's the default. Left alignment
+	 * renders identically to no alignment, so Write handles it fine.
+	 */
+	public function test_detect_unsupported_left_aligned_paragraph() {
+		$content = '<!-- wp:paragraph {"align":"left"} --><p style="text-align:left">Left</p><!-- /wp:paragraph -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that block-editor-style alignment classes are supported.
+	 * The classes are converted to inline styles on load so convertToBlocks()
+	 * can read them via node.style.textAlign.
+	 */
+	public function test_detect_supported_block_editor_alignment_classes() {
+		$content = '<!-- wp:paragraph {"align":"center"} --><p class="has-text-align-center">Centered</p><!-- /wp:paragraph -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+
+		$content = '<!-- wp:paragraph {"align":"right"} --><p class="has-text-align-right">Right</p><!-- /wp:paragraph -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+
+		$content = '<!-- wp:paragraph {"align":"left"} --><p class="has-text-align-left">Left</p><!-- /wp:paragraph -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that style.typography.textAlign alignment (newer Gutenberg format) is supported.
+	 */
+	public function test_detect_supported_style_typography_text_align() {
+		$content = '<!-- wp:paragraph {"style":{"typography":{"textAlign":"center"}}} --><p class="has-text-align-center">Centered</p><!-- /wp:paragraph -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+
+		$content = '<!-- wp:paragraph {"style":{"typography":{"textAlign":"right"}}} --><p class="has-text-align-right">Right</p><!-- /wp:paragraph -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+
+		$content = '<!-- wp:paragraph {"style":{"typography":{"textAlign":"left"}}} --><p class="has-text-align-left">Left</p><!-- /wp:paragraph -->';
+		$this->assertFalse( wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that style attr with unsupported properties (not just typography.textAlign) is flagged.
+	 */
+	public function test_detect_unsupported_style_with_extra_properties() {
+		// fontSize in style → unsupported.
+		$content = '<!-- wp:paragraph {"style":{"typography":{"textAlign":"center","fontSize":"18px"}}} --><p class="has-text-align-center">Styled</p><!-- /wp:paragraph -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+
+		// color in style → unsupported.
+		$content = '<!-- wp:paragraph {"style":{"color":{"text":"#ff0000"}}} --><p>Red</p><!-- /wp:paragraph -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that alignment classes are converted to inline styles.
+	 */
+	public function test_alignment_classes_to_inline() {
+		$html = '<p class="has-text-align-center wp-block-paragraph">Centered</p>';
+		$this->assertSame(
+			'<p class="wp-block-paragraph" style="text-align:center">Centered</p>',
+			wpcom_write_alignment_classes_to_inline( $html )
+		);
+
+		// Right alignment on a heading.
+		$html = '<h2 class="has-text-align-right wp-block-heading">Right</h2>';
+		$this->assertSame(
+			'<h2 class="wp-block-heading" style="text-align:right">Right</h2>',
+			wpcom_write_alignment_classes_to_inline( $html )
+		);
+
+		// Left alignment — class removed, inline style added.
+		$html = '<p class="has-text-align-left">Left</p>';
+		$this->assertSame(
+			'<p style="text-align:left">Left</p>',
+			wpcom_write_alignment_classes_to_inline( $html )
+		);
+
+		// No alignment class — unchanged.
+		$html = '<p class="wp-block-paragraph">Normal</p>';
+		$this->assertSame( $html, wpcom_write_alignment_classes_to_inline( $html ) );
+	}
+
+	/**
+	 * Test that alignment conversion merges into an existing style attribute
+	 * instead of producing invalid duplicate style attrs.
+	 */
+	public function test_alignment_classes_to_inline_with_existing_style() {
+		$html = '<p class="has-text-align-center" style="color:red">Centered</p>';
+		$this->assertSame(
+			'<p style="text-align:center;color:red">Centered</p>',
+			wpcom_write_alignment_classes_to_inline( $html )
+		);
+	}
+
+	/**
+	 * Test that wide-aligned heading returns 'block-editor' (not preserved).
+	 */
+	public function test_detect_unsupported_wide_aligned_heading() {
+		$content = '<!-- wp:heading {"level":2,"align":"wide"} --><h2 class="wp-block-heading alignwide">Title</h2><!-- /wp:heading -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that a custom className on a paragraph returns 'block-editor'.
+	 */
+	public function test_detect_unsupported_custom_class_name() {
+		$content = '<!-- wp:paragraph {"className":"my-custom-class"} --><p class="my-custom-class">Styled</p><!-- /wp:paragraph -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that a YouTube embed with className returns 'block-editor'.
+	 * className is not preserved by convertToBlocks() for any block type.
+	 */
+	public function test_detect_unsupported_youtube_embed_with_class_name() {
+		$attrs   = '{"url":"https://www.youtube.com/watch?v=abc","type":"video","providerNameSlug":"youtube","className":"wp-embed-aspect-16-9 wp-has-aspect-ratio"}';
+		$content = '<!-- wp:embed ' . $attrs . ' --><figure class="wp-block-embed"></figure><!-- /wp:embed -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that an anchor attribute on a heading returns 'block-editor'.
+	 */
+	public function test_detect_unsupported_anchor_attribute() {
+		$content = '<!-- wp:heading {"level":2,"anchor":"my-section"} --><h2 class="wp-block-heading" id="my-section">Title</h2><!-- /wp:heading -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that an embed block with malformed JSON attributes returns 'block-editor'.
+	 */
+	public function test_detect_unsupported_embed_malformed_json() {
+		$content = '<!-- wp:embed {not-valid-json} --><figure class="wp-block-embed"></figure><!-- /wp:embed -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	/**
+	 * Test that mixed supported and unsupported blocks returns 'block-editor'.
+	 */
+	public function test_detect_unsupported_mixed_content() {
+		$content = '<!-- wp:paragraph --><p>Hello</p><!-- /wp:paragraph -->'
+			. '<!-- wp:gallery {"ids":[1,2]} --><figure class="wp-block-gallery"></figure><!-- /wp:gallery -->';
+		$this->assertSame( 'block-editor', wpcom_write_detect_unsupported_content( $content ) );
+	}
+
+	// --- JS / PHP allowlist sync ---
+
+	/**
+	 * Verify that the PHP allowlist stays in sync with convertToBlocks() in
+	 * view.js.
+	 *
+	 * Block types are extracted directly from the `<!-- wp:type -->` comment
+	 * literals that convertToBlocks() emits, so no manual annotations are
+	 * needed for that axis.
+	 *
+	 * Attribute-level sync uses a hardcoded map of what convertToBlocks()
+	 * outputs per block type.  When you add attribute support in view.js,
+	 * update both wpcom_write_allowed_block_attrs() in write.php and
+	 * $js_attrs below.
+	 */
+	public function test_allowed_block_types_in_sync_with_convert_to_blocks() {
+		// -- Block-type sync (automatic from JS source) --
+
+		$view_js_path = dirname( __DIR__, 4 ) . '/src/features/write/view.js';
+		$view_js      = file_get_contents( $view_js_path );
+		$this->assertNotEmpty( $view_js, 'Could not read view.js at ' . $view_js_path );
+
+		$fn_start = strpos( $view_js, 'function convertToBlocks(' );
+		$this->assertNotFalse( $fn_start, 'convertToBlocks() not found in view.js' );
+		// Read enough of the function body to capture all block types.
+		// If convertToBlocks() grows past this, the assertion below will
+		// catch missing types. Increase as needed.
+		$fn_body = substr( $view_js, $fn_start, 6000 );
+
+		// Match opening block comments only (negative lookbehind skips closing <!-- /wp:... -->).
+		preg_match_all( '/<!-- (?!\/)wp:([a-z][a-z0-9-]*)/', $fn_body, $matches );
+		$js_types = array_values( array_unique( $matches[1] ) );
+		sort( $js_types );
+		$this->assertNotEmpty( $js_types, 'No block types found in convertToBlocks()' );
+
+		$php_all   = wpcom_write_allowed_block_attrs();
+		$php_types = array_keys( $php_all );
+		sort( $php_types );
+
+		$this->assertSame(
+			$js_types,
+			$php_types,
+			sprintf(
+				"Block types are out of sync.\nJS (view.js):  [%s]\nPHP (write.php): [%s]",
+				implode( ', ', $js_types ),
+				implode( ', ', $php_types )
+			)
+		);
+
+		// -- Attribute-level sync (hardcoded JS expectations) --
+		// These are the attributes convertToBlocks() actually writes into
+		// block JSON.  Every one must appear in the PHP allowlist.
+
+		$js_attrs = array(
+			'embed'     => array( 'providerNameSlug', 'responsive', 'type', 'url' ),
+			'heading'   => array( 'align', 'level' ),
+			'image'     => array(),
+			'list'      => array( 'ordered' ),
+			'list-item' => array(),
+			'paragraph' => array( 'align' ),
+			'quote'     => array( 'align' ),
+			'separator' => array(),
+		);
+
+		// PHP-only extras: attributes the block editor adds as metadata
+		// that don't affect visible content.  Write doesn't produce these
+		// but safely ignores them.  Any PHP attr not in $js_attrs and not
+		// listed here is an error — it would let unsupported content through.
+		$php_extras = array(
+			'image' => array( 'alt', 'id', 'sizeSlug' ),
+		);
+
+		foreach ( $js_attrs as $block => $expected ) {
+			$this->assertArrayHasKey( $block, $php_all, "Block '$block' missing from PHP allowlist." );
+
+			// Every JS attr must exist in PHP.
+			$missing = array_diff( $expected, $php_all[ $block ] );
+			$this->assertEmpty(
+				$missing,
+				sprintf(
+					"Block '%s': JS outputs attrs [%s] missing from PHP allowlist [%s].",
+					$block,
+					implode( ', ', $missing ),
+					implode( ', ', $php_all[ $block ] )
+				)
+			);
+
+			// Every PHP attr must be in JS or in the documented extras.
+			$allowed_extras = $php_extras[ $block ] ?? array();
+			$unexpected     = array_diff( $php_all[ $block ], $expected, $allowed_extras );
+			$this->assertEmpty(
+				$unexpected,
+				sprintf(
+					"Block '%s': PHP allows attrs [%s] not produced by JS and not in \$php_extras.",
+					$block,
+					implode( ', ', $unexpected )
+				)
+			);
+		}
+	}
+
+	/**
+	 * Test that loading an existing post in the Write editor sets the last editor meta.
+	 */
+	public function test_existing_post_sets_last_editor_meta() {
+		wp_set_current_user( $this->admin_id );
+
+		$post_id = wp_insert_post(
+			array(
+				'post_title'  => 'Test Post',
+				'post_status' => 'publish',
+				'post_author' => $this->admin_id,
+			)
+		);
+
+		// Simulate opening the post in the Write editor.
+		$_GET['post'] = $post_id;
+
+		ob_start();
+		wpcom_write_render_admin_page();
+		ob_end_clean();
+
+		unset( $_GET['post'] );
+
+		$this->assertEquals( 'write-editor', get_post_meta( $post_id, '_last_editor_used_jetpack', true ) );
+	}
+
+	/**
+	 * Test that loading an existing post overwrites a previous editor meta value.
+	 */
+	public function test_existing_post_overwrites_previous_editor_meta() {
+		wp_set_current_user( $this->admin_id );
+
+		$post_id = wp_insert_post(
+			array(
+				'post_title'  => 'Test Post',
+				'post_status' => 'publish',
+				'post_author' => $this->admin_id,
+			)
+		);
+
+		// Simulate the post was previously edited in the block editor.
+		update_post_meta( $post_id, '_last_editor_used_jetpack', 'block-editor' );
+
+		$_GET['post'] = $post_id;
+
+		ob_start();
+		wpcom_write_render_admin_page();
+		ob_end_clean();
+
+		unset( $_GET['post'] );
+
+		$this->assertEquals( 'write-editor', get_post_meta( $post_id, '_last_editor_used_jetpack', true ) );
+	}
+
+	/**
+	 * Test that saving a post via REST with wpcom_write_editor_used sets last-editor meta.
+	 */
+	public function test_rest_save_with_write_editor_signal_sets_meta() {
+		wp_set_current_user( $this->admin_id );
+
+		$post_id = wp_insert_post(
+			array(
+				'post_title'  => 'REST Signal Test',
+				'post_status' => 'draft',
+				'post_author' => $this->admin_id,
+			)
+		);
+
+		$request = new WP_REST_Request( 'POST', sprintf( '/wp/v2/posts/%d', $post_id ) );
+		$request->set_body_params(
+			array(
+				'title'                   => 'Updated via Write',
+				'wpcom_write_editor_used' => true,
+			)
+		);
+
+		rest_get_server()->dispatch( $request );
+
+		$this->assertEquals( 'write-editor', get_post_meta( $post_id, '_last_editor_used_jetpack', true ) );
+	}
+
+	/**
+	 * Test that saving a post via REST without the signal does not set last-editor meta.
+	 */
+	public function test_rest_save_without_write_editor_signal_does_not_set_meta() {
+		wp_set_current_user( $this->admin_id );
+
+		$post_id = wp_insert_post(
+			array(
+				'post_title'  => 'REST No Signal Test',
+				'post_status' => 'draft',
+				'post_author' => $this->admin_id,
+			)
+		);
+
+		$request = new WP_REST_Request( 'POST', sprintf( '/wp/v2/posts/%d', $post_id ) );
+		$request->set_body_params(
+			array(
+				'title' => 'Updated without Write',
+			)
+		);
+
+		rest_get_server()->dispatch( $request );
+
+		$this->assertEmpty( get_post_meta( $post_id, '_last_editor_used_jetpack', true ) );
+	}
+
+	/**
+	 * Test that a user without edit_post capability cannot trigger the meta update.
+	 */
+	public function test_remember_write_editor_without_capability_does_not_set_meta() {
+		$post_id = wp_insert_post(
+			array(
+				'post_title'  => 'Capability Test',
+				'post_status' => 'draft',
+				'post_author' => $this->admin_id,
+			)
+		);
+
+		// Switch to a subscriber who cannot edit this post.
+		wp_set_current_user( $this->subscriber_id );
+
+		$request = new \WP_REST_Request( 'POST', sprintf( '/wp/v2/posts/%d', $post_id ) );
+		$request->set_body_params(
+			array(
+				'wpcom_write_editor_used' => true,
+			)
+		);
+
+		\Automattic\Jetpack\Jetpack_Mu_Wpcom\WPCOM_Block_Editor\EditorType\remember_write_editor( get_post( $post_id ), $request );
+
+		$this->assertEmpty( get_post_meta( $post_id, '_last_editor_used_jetpack', true ) );
 	}
 }

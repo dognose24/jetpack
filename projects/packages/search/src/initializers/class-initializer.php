@@ -15,6 +15,22 @@ use WP_Error;
 class Initializer {
 
 	/**
+	 * Whether the experimental block-template overlay path has been wired
+	 * up this request. Set to `true` at the end of `init_search_blocks()`
+	 * only when BOTH the `jetpack_search_blocks_enabled` gate AND the
+	 * `jetpack_search_overlay_block_template_enabled` gate are on — never
+	 * by the overlay filter alone. `init()` reads this to decide whether
+	 * `init_search()` returning falsy is a real failure or a no-op-by-
+	 * design. Anchoring on the actually-wired-up state (not the filter
+	 * read) prevents the abort carve-out from being bypassed by setting
+	 * the overlay filter on a site that doesn't have Search Blocks
+	 * registered.
+	 *
+	 * @var bool
+	 */
+	private static $block_template_overlay_active = false;
+
+	/**
 	 * Initialize the search package.
 	 *
 	 * The method is called from the `Config` class.
@@ -54,6 +70,13 @@ class Initializer {
 			return;
 		}
 
+		// Register the Search 3.0 Interactivity API blocks. Connection +
+		// plan are already guaranteed by the abort above; this call only
+		// layers the Phase 1 feature flag on top, mirroring how
+		// `init_search()` layers `is_instant_search_enabled` on top of
+		// the same upstream gate.
+		static::init_search_blocks();
+
 		$blog_id = Helper::get_wpcom_site_id();
 		if ( ! $blog_id ) {
 			/** This filter is documented in search/src/initalizers/class-initalizer.php */
@@ -67,8 +90,18 @@ class Initializer {
 			return;
 		}
 
-		// Initialize search package.
-		if ( ! static::init_search( $blog_id ) ) {
+		// Initialize search package. The block-template overlay path
+		// intentionally skips both instant and classic init (Search_Blocks
+		// owns the UI), so a falsy return there is by design — not an
+		// abort. Anything else falsy is a real failure. Anchor on the
+		// actually-wired-up flag (set in `init_search_blocks()` only when
+		// both gates passed) rather than the overlay filter alone, so
+		// flipping the overlay filter without the blocks gate can never
+		// bypass the abort.
+		$initialized = static::init_search( $blog_id )
+			|| self::$block_template_overlay_active;
+
+		if ( ! $initialized ) {
 			/** This filter is documented in search/src/initalizers/class-initalizer.php */
 			do_action( 'jetpack_search_abort', 'jetpack_search_init_search', null );
 			return;
@@ -102,28 +135,56 @@ class Initializer {
 		add_action( 'rest_api_init', array( new REST_Controller(), 'register_rest_routes' ) );
 		// The dashboard has to be initialized before connection.
 		( new Dashboard() )->init_hooks();
-		// Register the Interactivity API search blocks. These register
-		// server-side (block types, patterns, variations) regardless of
-		// connection/plan/module state so the blocks appear in the editor on
-		// any site that has the package loaded; runtime queries still require
-		// a connected site with a Search plan.
-		//
-		// Gated behind the `jetpack_search_blocks_enabled` filter, which
-		// defaults to false. This is the feature flag for Phase 1 of Search
-		// 3.0: the blocks, pattern, and shared Interactivity API store only
-		// register when a site has explicitly opted in.
+		( new AI_Answers() )->init();
+	}
+
+	/**
+	 * Register the Search 3.0 Interactivity API blocks on this request,
+	 * gated by the Phase 1 feature flag.
+	 *
+	 * Called from `init()` after the upstream connection + Search-plan
+	 * abort, so on entry the site is guaranteed to be connected and on a
+	 * plan that supports Search (paid plans or the free
+	 * `jetpack_search_free` product). The remaining gate is the
+	 * feature-flag opt-in.
+	 *
+	 * Sits before the blog_id and module-active checks because admins
+	 * should be able to configure Search blocks in the editor regardless
+	 * of which runtime experience is enabled — matching how Instant
+	 * Search layers its own opt-in on top of the same connection + plan
+	 * gate further down in `init_search()`.
+	 */
+	protected static function init_search_blocks() {
 		/**
 		 * Filter whether the Jetpack Search 3.0 Interactivity API blocks are enabled.
 		 *
-		 * Returning true registers the blocks, the "Jetpack Search" block +
-		 * pattern categories, the "Blog Search Page" pattern, and seeds the
-		 * Interactivity API store on the front end. Default is false until
-		 * Search 3.0 ships.
+		 * Necessary but not sufficient on its own — registration also
+		 * requires the site to be connected and on a plan that supports
+		 * Search (paid plans or the free `jetpack_search_free` product).
 		 *
 		 * @param bool $enabled Default false.
 		 */
-		if ( apply_filters( 'jetpack_search_blocks_enabled', false ) ) {
-			Search_Blocks::init();
+		if ( ! apply_filters( 'jetpack_search_blocks_enabled', false ) ) {
+			return;
+		}
+
+		// Phase 1 ships without WooCommerce-only Search blocks. Sites
+		// that want them back hook the same filter at priority > 10
+		// so their callback runs after this default.
+		add_filter( 'jetpack_search_woocommerce_blocks_enabled', '__return_false' );
+		Search_Blocks::init();
+
+		// Experimental block-template overlay (off by default; see
+		// `Search_Blocks::is_block_template_overlay_enabled()`): bypass the
+		// preact `SearchApp` so it doesn't race the block overlay for
+		// `?s=`, popstate, and theme search-trigger selectors. Suppressing
+		// at the init filter is cleaner than dequeuing post-enqueue. The
+		// active flag set here is the single source of truth for the
+		// `init()` carve-out — it is true only when BOTH this branch ran
+		// (blocks gate passed) AND the overlay gate is on.
+		if ( Search_Blocks::is_block_template_overlay_enabled() ) {
+			add_filter( 'jetpack_search_init_instant_search', '__return_false' );
+			self::$block_template_overlay_active = true;
 		}
 	}
 

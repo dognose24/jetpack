@@ -4,7 +4,7 @@
  * `bin/teamcity-builds/jetpack-stubs/stub-defs.php` and regenerate the stubs
  * by triggering the Jetpack Staging → Update WPCOM Stubs job in TeamCity.
  *
- * Stubs automatically generated from WordPress.com commit b9cdd5655544ee93dbd0e64d835f467279c727e0.
+ * Stubs automatically generated from WordPress.com commit 75387561b79fa72a086b1acde8f35940c0d1d803.
  */
 
 namespace {
@@ -519,6 +519,21 @@ namespace {
         {
         }
     }
+    /**
+     * @return array{quota: int, used: int, remaining: int, resetsAt: string|null}
+     */
+    function posts_to_podcast_get_usage(int $blog_id, ?int $now = \null): array
+    {
+    }
+    /**
+     * @return array{id:int, queued_at:int}|null
+     */
+    function posts_to_podcast_get_active_job_record(int $blog_id): ?array
+    {
+    }
+    function posts_to_podcast_get_job_result(int $job_id): ?int
+    {
+    }
     class Publicize_Actions
     {
         /**
@@ -693,6 +708,14 @@ namespace {
     {
     }
     function wpcom_actionbar_enqueue_scripts()
+    {
+    }
+    /**
+     * @param int|array $job_id
+     * @param string $prefix
+     * @return string|array|false
+     */
+    function get_job_status($job_id, $prefix = 'wpj_')
     {
     }
     /**
@@ -1702,14 +1725,35 @@ namespace Publicize {
     {
     }
     /**
-     * @param \WP_Post $post
-     * @param string $network
-     * @param string|null $template
-     * @param int|null $char_limit
-     * @param bool $is_social_post
-     * @return string|null
+     * @param int $blog_id
+     * @return bool
      */
-    function render_message_for_network(\WP_Post $post, string $network, ?string $template = null, ?int $char_limit = null, bool $is_social_post = false): ?string
+    function can_use_per_connection_templates($blog_id = 0): bool
+    {
+    }
+    /**
+     * @param \WP_Post $post
+     * @param array $items
+     * @param array $post_intent
+     * @return array<int, array<string, mixed>>
+     */
+    function render_messages(\WP_Post $post, array $items, array $post_intent = array()): array
+    {
+    }
+    /**
+     * @deprecated 
+     * @param \WP_Post $post
+     * @param array $items
+     * @param array $post_intent
+     * @return array<int, array<string, mixed>>
+     */
+    function render_messages_for_networks(\WP_Post $post, array $items, array $post_intent = array()): array
+    {
+    }
+    /**
+     * @return array<string, array{title:string}>
+     */
+    function get_supported_placeholders(): array
     {
     }
     /**
